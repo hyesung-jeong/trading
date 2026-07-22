@@ -190,7 +190,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v17</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v18</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -3567,7 +3567,11 @@ const PRESETS={
     {name:'오렌지', p:{t_rsiMin:'51',t_rsiMax:'66',t_comp:'80',t_loss:'30',
       t_sfN:'9',t_sfBuy:'-0.01/5',t_sfSell:'8/1',t_sfHold:'3/38',t_twSF:'11.11',
       t_mdN:'9',t_mdBuy:'2/-0.01',t_mdSell:'10',t_mdHold:'7/4',t_twMD:'6/13/13/13/13/12/12/12/6',
-      t_agN:'9',t_agBuy:'-0.01/1',t_agSell:'0.01/4',t_agHold:'50',t_twAG:'6/13/13/13/13/12/12/12/6'}}
+      t_agN:'9',t_agBuy:'-0.01/1',t_agSell:'0.01/4',t_agHold:'50',t_twAG:'6/13/13/13/13/12/12/12/6'}},
+    {name:'프렌징', p:{t_rsiMin:'46',t_rsiMax:'64',t_comp:'80',t_loss:'30',
+      t_sfN:'9',t_sfBuy:'4.3',t_sfSell:'1.7',t_sfHold:'19',t_twSF:'7/10/6.5/29.5/29/26/26/29/15.5',
+      t_mdN:'7',t_mdBuy:'4.2',t_mdSell:'3.7',t_mdHold:'5',t_twMD:'22.5/14/12/20/26/6/24',
+      t_agN:'9',t_agBuy:'4.9',t_agSell:'2.4',t_agHold:'35',t_twAG:'6/7/8/29/25/25/9/20/10'}}
   ]
 };
 function applyPreset(id, presetId){
@@ -3591,7 +3595,7 @@ function getPresetStore(){
   }
   Object.keys(PRESETS).forEach(t=>{ if(!o.types[t]) o.types[t]=[]; });
   // 새로 추가된 기본 프리셋을 기존 저장소에 1회 병합 (버전 올릴 때만)
-  const BUILTIN_VER=2;
+  const BUILTIN_VER=3;
   if((o.builtinVer||1)<BUILTIN_VER){
     Object.keys(PRESETS).forEach(t=>{
       (PRESETS[t]||[]).forEach((pr,i)=>{
