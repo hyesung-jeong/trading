@@ -190,7 +190,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v18</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v18</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -3523,9 +3523,18 @@ function nextTypeName(type){ // 동파2, 동파3...
 function withSlotParams(slot, fn){
   const p=slot.params||{};
   const bak={};
-  for(const id in p){ const el=document.getElementById(id); if(el){ bak[id]=el.value; el.value=p[id]; } }
+  for(const id in p){ if(id==='df_tw') continue; const el=document.getElementById(id); if(el){ bak[id]=el.value; el.value=p[id]; } }
+  // 떨프 슬롯별 티어비중: 전역 TWDF를 잠깐 교체
+  let twBak=null, twChanged=false;
+  if(slot.type==='dropf' && p['df_tw']!==undefined){
+    twBak=Array.isArray(TWDF)?TWDF.slice():[]; twChanged=true;
+    let tw=p['df_tw'];
+    if(typeof tw==='string') tw=tw.split(/[\/,\s]+/).map(x=>parseFloat(x)).filter(x=>!isNaN(x));
+    TWDF=Array.isArray(tw)?tw.slice():[];
+  }
   let r; try{ r=fn(); } finally {
     for(const id in bak){ const el=document.getElementById(id); if(el) el.value=bak[id]; }
+    if(twChanged) TWDF=twBak;
   }
   return r;
 }
@@ -3635,7 +3644,7 @@ function renderWeights(){
 }
 function renameSlot(id,v){ const sl=slotById(id); if(sl){ sl.name=v||sl.name; run(); } }
 // 슬롯 파라미터 편집 모달
-const TYPE_PREFIX={dongpa:'g_', three:'t_', dual:'d_'};
+const TYPE_PREFIX={dongpa:'g_', dropf:'df_', three:'t_', dual:'d_'};
 // ===== 매매법별 프리셋 (버튼 누르면 그 슬롯 파라미터 자동설정) =====
 const PRESETS={
   dongpa:[
@@ -3777,6 +3786,27 @@ function openSlotParams(id){
     });
     h+=`</tbody></table>`;
   });
+  // ── 떨프 전용: 티어 비중 그리드 ──
+  if(sl.type==='dropf'){
+    const nN=parseInt((ap['df_nPos']!==undefined?ap['df_nPos']:(document.getElementById('df_nPos')||{}).value))||6;
+    let tw=ap['df_tw'];
+    if(Array.isArray(tw)) tw=tw.slice();
+    else if(typeof tw==='string' && tw.trim()) tw=tw.split(/[\/,\s]+/).map(x=>parseFloat(x)).filter(x=>!isNaN(x));
+    else tw=null;
+    const eq=Math.round((100/nN)*10)/10;
+    if(!tw||!tw.length){ tw=Array(nN).fill(eq); }
+    while(tw.length<nN) tw.push(eq);
+    if(tw.length>nN) tw=tw.slice(0,nN);
+    h+=`<div style="font-weight:600;font-size:13px;margin:12px 0 6px">떨프 · 티어 비중 (%)</div>`;
+    h+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">`;
+    for(let i=0;i<nN;i++){
+      h+=`<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:10px;color:var(--faint)">T${i+1}</span>`+
+         `<input type="number" step="0.1" value="${tw[i]}" onchange="setSlotTwDf('${id}',${i},this.value,${nN})" style="width:58px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:12px;padding:4px 6px;border-radius:5px"></div>`;
+    }
+    h+=`</div>`;
+    const sum=tw.reduce((a,b)=>a+(+b||0),0);
+    h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:6px">합계 ${sum.toFixed(1)}% · 균등 기본 ${eq}% <span onclick="setSlotTwDfEqual('${id}',${nN})" style="color:var(--accent2);cursor:pointer;margin-left:6px">균등으로</span></div>`;
+  }
   h+=`<div style="margin-top:16px;display:flex;gap:8px"><button onclick="resetSlotParams('${id}')" style="background:var(--panel2);border:1px solid var(--line);color:var(--dim);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px">기본값으로</button>`;
   h+=`<button onclick="closeSlotParams()" style="background:var(--accent2);border:none;color:#fff;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">완료</button></div>`;
   h+=`</div></div>`;
@@ -3845,6 +3875,15 @@ function showYearChart(year){
 function closeYearChart(){ const m=document.getElementById('year-chart-modal'); if(m) m.innerHTML=''; }
 function setSlotParam(id,pid,val){ const sl=slotById(id); if(!sl) return;
   if(!sl.params) sl.params={}; sl.params[pid]=val; saveAll(); openSlotParams(id); renderWeights(); }
+function setSlotTwDf(id,i,val,nN){ const sl=slotById(id); if(!sl) return;
+  if(!sl.params) sl.params={};
+  let tw=sl.params['df_tw'];
+  const eq=Math.round((100/nN)*10)/10;
+  if(Array.isArray(tw)) tw=tw.slice(); else tw=Array(nN).fill(eq);
+  while(tw.length<nN) tw.push(eq); if(tw.length>nN) tw=tw.slice(0,nN);
+  tw[i]=parseFloat(val)||0; sl.params['df_tw']=tw; saveAll(); openSlotParams(id); renderWeights(); }
+function setSlotTwDfEqual(id,nN){ const sl=slotById(id); if(!sl) return;
+  if(!sl.params) sl.params={}; delete sl.params['df_tw']; saveAll(); openSlotParams(id); renderWeights(); }
 function resetSlotParams(id){ const sl=slotById(id); if(sl){ sl.params={}; sl.presetId=null; saveAll(); openSlotParams(id); renderWeights(); } }
 function setW(id,v){ const sl=slotById(id); if(sl) sl.w=parseFloat(v)||0; updateSum(); run(); }
 function setWslider(id,v){
