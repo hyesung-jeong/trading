@@ -3654,7 +3654,8 @@ const PRESETS={
   ],
   dual:[
     {name:'로켓', p:{d_nAtk:'6',d_holdA:'2.0',d_atkBuy:'8.0',d_sellA:'0.4',d_nDef:'5',d_defHold:'8',d_defBuy1:'-0.6',d_defBuy2:'5.5',d_defSell:'0.7',d_maN:'3',d_defW:'6/13/20/27/34'}},
-    {name:'전차', p:{d_nAtk:'5',d_holdA:'2.0',d_atkBuy:'0.5',d_sellA:'0.4',d_nDef:'5',d_defHold:'8',d_defBuy1:'-0.6',d_defBuy2:'5.5',d_defSell:'0.7',d_maN:'3',d_defW:'6/13/20/27/34'}}
+    {name:'전차', p:{d_nAtk:'5',d_holdA:'2.0',d_atkBuy:'0.5',d_sellA:'0.4',d_nDef:'5',d_defHold:'8',d_defBuy1:'-0.6',d_defBuy2:'5.5',d_defSell:'0.7',d_maN:'3',d_defW:'6/13/20/27/34'}},
+    {name:'잠수함', p:{d_nAtk:'6',d_holdA:'2.0',d_atkBuy:'8.0',d_atkBuyNeg:'-0.1',d_sellA:'0.4',d_nDef:'5',d_defHold:'8',d_defBuy1:'-0.6',d_defBuy2:'5.5',d_defSell:'0.7',d_maN:'3',d_defW:'6/13/20/27/34'}}
   ],
   three:[
     {name:'오렌지', p:{t_rsiMin:'51',t_rsiMax:'66',t_comp:'80',t_loss:'30',
@@ -3684,7 +3685,7 @@ function getPresetStore(){
   }
   Object.keys(PRESETS).forEach(t=>{ if(!o.types[t]) o.types[t]=[]; });
   // 새로 추가된 기본 프리셋을 기존 저장소에 1회 병합 (버전 올릴 때만)
-  const BUILTIN_VER=2;
+  const BUILTIN_VER=3;
   if((o.builtinVer||1)<BUILTIN_VER){
     Object.keys(PRESETS).forEach(t=>{
       (PRESETS[t]||[]).forEach((pr,i)=>{
