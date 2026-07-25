@@ -243,6 +243,7 @@
           <div class="ptabs">
             <button class="on" data-p="dual" onclick="ptab('dual')">듀얼</button>
             <button data-p="dongpa" onclick="ptab('dongpa')">동파</button>
+            <button data-p="dropf" onclick="ptab('dropf')">떨프</button>
             <button data-p="three" onclick="ptab('three')">3모드</button>
           </div>
 
@@ -277,6 +278,18 @@
             <div class="psub">공통</div>
             <div class="prow"><label>복리정산주기<span class="phint">일</span></label><div class="stepper"><input id="g_cycle" value="10"><div class="steparrows"><button type="button" onclick="stepInput('g_cycle',1)">▲</button><button type="button" onclick="stepInput('g_cycle',-1)">▼</button></div></div></div>
             <div class="prow"><label>분할개수</label><div class="stepper"><input id="g_nPos" value="6"><div class="steparrows"><button type="button" onclick="stepInput('g_nPos',1)">▲</button><button type="button" onclick="stepInput('g_nPos',-1)">▼</button></div></div></div>
+          </div>
+
+          <div class="pgroup" id="p-dropf">
+            <div class="note" style="margin:0 0 12px">떨프 · 모드 없음. 매수/매도/손절일은 티어 공통, 티어별 비중만 조절합니다. (기본 균등 = 100÷분할수)</div>
+            <div class="prow"><label>분할수</label><div class="stepper"><input id="df_nPos" value="6" onchange="renderTwDf()"><div class="steparrows"><button type="button" onclick="stepInput('df_nPos',1)">▲</button><button type="button" onclick="stepInput('df_nPos',-1)">▼</button></div></div></div>
+            <div class="prow"><label>매수율<span class="phint">하락%</span></label><div class="stepper"><input id="df_buy" value="-3"><div class="steparrows"><button type="button" onclick="stepInput('df_buy',0.1)">▲</button><button type="button" onclick="stepInput('df_buy',-0.1)">▼</button></div></div></div>
+            <div class="prow"><label>매도율<span class="phint">익절%</span></label><div class="stepper"><input id="df_sell" value="3"><div class="steparrows"><button type="button" onclick="stepInput('df_sell',0.1)">▲</button><button type="button" onclick="stepInput('df_sell',-0.1)">▼</button></div></div></div>
+            <div class="prow"><label>손절일<span class="phint">보유한계</span></label><div class="stepper"><input id="df_hold" value="20"><div class="steparrows"><button type="button" onclick="stepInput('df_hold',1)">▲</button><button type="button" onclick="stepInput('df_hold',-1)">▼</button></div></div></div>
+            <div class="tw-inline" id="tw-df"></div>
+            <div class="psub">자금</div>
+            <div class="prow"><label>복리비중<span class="phint">%</span></label><div class="stepper"><input id="df_comp" value="100"><div class="steparrows"><button type="button" onclick="stepInput('df_comp',1)">▲</button><button type="button" onclick="stepInput('df_comp',-1)">▼</button></div></div></div>
+            <div class="prow"><label>손실비중<span class="phint">%</span></label><div class="stepper"><input id="df_loss" value="100"><div class="steparrows"><button type="button" onclick="stepInput('df_loss',1)">▲</button><button type="button" onclick="stepInput('df_loss',-1)">▼</button></div></div></div>
           </div>
 
           <div class="pgroup" id="p-three">
@@ -3310,6 +3323,75 @@ function backtestYear(items,P,tlog,prevYearClose){
   return {ret:ret, mdd:-maxDD, maxRet:maxRet, minRet:minRet, series:series};
 }
 
+
+// ===== 떨프 백테스트 엔진 (3모드 구조 · 모드 없음 · 티어비중 조절 · 연도독립) =====
+function runDropf(rows, P){
+  const n=rows.length;
+  const closes=rows.map(r=>r[1]);
+  const years=rows.map(r=>2000+parseInt(r[0].slice(0,2)));
+  const initCash=P.initCap;
+  const uFee=P.fee||0;
+  const TOTAL_SELL_FEE=0.0000278+uFee, FEE_BUY=0+uFee;
+  let running=trunc2(initCash), cash=running, base=running;
+  let inv=[]; let peak=running, ymdd=0, ymin=running;
+  const tlog=[];
+  const warmF=rows.map(r=>r[6]===1);
+  let startI=0; while(startI<n && warmF[startI]) startI++;
+  let curYear=years[startI]; let yStart=running;
+  const yearly={}; const series={};
+  for(let i=startI;i<n;i++){
+    if(warmF[i]) continue;
+    if(years[i]!==curYear){
+      const lastClose=closes[i-1];
+      let gross=0; inv.forEach(p=>gross+=p.qty*lastClose);
+      const eq=gross-gross*TOTAL_SELL_FEE; const endAsset=trunc2(cash+eq+EPS3);
+      yearly[curYear]=[(endAsset/yStart-1)*100,-ymdd*100,(peak/yStart-1)*100,(ymin/yStart-1)*100];
+      running=trunc2(initCash); yStart=running; curYear=years[i];
+      cash=running; base=running; inv=[]; peak=running; ymdd=0; ymin=running;
+    }
+    const close=closes[i]; const prevClose=i>0?closes[i-1]:close;
+    const tier=inv.length+1;
+    let buyQty=0, buyTarget=0;
+    if(tier<=P.weight.length){
+      const w=P.weight[tier-1];
+      const seed=trunc2(Math.min(base*w,cash)+EPS3);
+      buyTarget=trunc2(prevClose*(1+P.buy)+EPS3);
+      if(buyTarget>0) buyQty=Math.floor(seed/buyTarget);
+    }
+    let cf=0, pl=0; const newInv=[];
+    inv.forEach(p=>{ p.days++;
+      const sellTarget=Math.ceil(p.bp*(1+P.sell)*100-EPS3)/100;
+      if(close>=sellTarget||p.days>=P.hold){
+        const gross=p.qty*close; const net=gross-gross*TOTAL_SELL_FEE;
+        cf+=net; pl+=net-p.cost;
+        tlog.push({ymd:rows[i][0],act:'매도',tier:'T'+p.tier,mode:'떨프',reason:(close>=sellTarget?'익절':'보유한계'),qty:p.qty,price:close,amt:net});
+      } else newInv.push(p);
+    });
+    inv=newInv;
+    if(buyQty>0 && close<=buyTarget){
+      const gross=buyQty*close; const cost=gross+gross*FEE_BUY;
+      if(cost<=cash){ cf-=cost; inv.push({bp:close,qty:buyQty,cost:cost,tier:tier,days:0});
+        tlog.push({ymd:rows[i][0],act:'매수',tier:'T'+tier,mode:'떨프',reason:'매수',qty:buyQty,price:close,amt:cost}); }
+    }
+    cash=trunc2(cash+cf+EPS3);
+    const plf=trunc2(pl+EPS3);
+    if(plf>0) base+=plf*(P.comp_rate!==undefined?P.comp_rate:1);
+    else if(plf<0) base+=plf*(P.loss_rate!==undefined?P.loss_rate:1);
+    base=trunc2(base+EPS3);
+    let eq=0; inv.forEach(p=>eq+=p.qty*close); eq=trunc2(eq+EPS3);
+    const total=trunc2(cash+eq+EPS3);
+    if(total>peak) peak=total;
+    if(total<ymin) ymin=total;
+    const dd=peak>0?(peak-total)/peak:0; if(dd>ymdd) ymdd=dd;
+    series[rows[i][0]]=total/yStart;
+  }
+  let gross=0; inv.forEach(p=>gross+=p.qty*closes[n-1]);
+  const eq=gross-gross*TOTAL_SELL_FEE; const endAsset=trunc2(cash+eq+EPS3);
+  yearly[curYear]=[(endAsset/yStart-1)*100,-ymdd*100,(peak/yStart-1)*100,(ymin/yStart-1)*100];
+  const ys=Object.keys(yearly).map(Number).sort((a,b)=>a-b);
+  const out={}; ys.forEach(y=>out[y]={ret:yearly[y][0],mdd:yearly[y][1],maxRet:yearly[y][2],minRet:yearly[y][3]});
+  return {yearly:out, years:ys, series:series, tlog:tlog};
+}
 // ===== 3모드 백테스트 엔진 (simulate_simple_yearly 포팅, 연도별 독립 단리) =====
 function trunc2(v){ return Math.trunc(v*100)/100; }
 const EPS3=0.000001;
@@ -3422,7 +3504,7 @@ function mondayNum(yymmdd){
 
 // ===== UI / 포트폴리오 =====
 // ===== 멀티슬롯 구조: 같은 매매법을 여러 개(최대 타입별 3개) 추가 가능 =====
-const STRAT_TYPES={dongpa:{name:"동파",cls:"g"}, three:{name:"3모드",cls:"t"}, dual:{name:"듀얼",cls:"d"}, cash:{name:"현금",cls:"c"}};
+const STRAT_TYPES={dongpa:{name:"동파",cls:"g"}, dropf:{name:"떨프",cls:"g"}, three:{name:"3모드",cls:"t"}, dual:{name:"듀얼",cls:"d"}, cash:{name:"현금",cls:"c"}};
 const MAX_PER_TYPE=3;
 let _slotSeq=0;
 function newSlotId(){ return 's'+(++_slotSeq); }
@@ -3451,6 +3533,7 @@ function withSlotParams(slot, fn){
 function paramsForType(type){
   if(type==='dual') return dualP();
   if(type==='dongpa') return dongpaP();
+  if(type==='dropf') return dropfP();
   if(type==='three') return threeP();
   return null;
 }
@@ -3471,11 +3554,12 @@ function runSlotEngine(slot){
     if(slot.type==='cash') return runCash();
     if(slot.type==='dual'){ const dp=dualP(); return applyDualSheet(runDual(DATA,dp),dp); }
     if(slot.type==='dongpa') return runDongpa(DATA,dongpaP());
+    if(slot.type==='dropf') return runDropf(DATA,dropfP());
     if(slot.type==='three') return runThree(DATA,threeP());
     return null;
   });
 }
-const COLORS={dual:"var(--dual)",dongpa:"var(--dongpa)",three:"var(--three)"};
+const COLORS={dual:"var(--dual)",dongpa:"var(--dongpa)",dropf:"var(--dongpa)",three:"var(--three)"};
 // 슬롯 비교용 색상 팔레트 (최대 9슬롯)
 const CMP_COLORS=["#2563eb","#16a34a","#d97706","#dc2626","#7c3aed","#0891b2","#db2777","#65a30d","#ea580c"];
 function slotColor(id){ const i=SLOTS.findIndex(s=>s.id===id); return CMP_COLORS[(i<0?0:i)%CMP_COLORS.length]; }
@@ -3567,11 +3651,7 @@ const PRESETS={
     {name:'오렌지', p:{t_rsiMin:'51',t_rsiMax:'66',t_comp:'80',t_loss:'30',
       t_sfN:'9',t_sfBuy:'-0.01/5',t_sfSell:'8/1',t_sfHold:'3/38',t_twSF:'11.11',
       t_mdN:'9',t_mdBuy:'2/-0.01',t_mdSell:'10',t_mdHold:'7/4',t_twMD:'6/13/13/13/13/12/12/12/6',
-      t_agN:'9',t_agBuy:'-0.01/1',t_agSell:'0.01/4',t_agHold:'50',t_twAG:'6/13/13/13/13/12/12/12/6'}},
-    {name:'프렌징', p:{t_rsiMin:'46',t_rsiMax:'64',t_comp:'80',t_loss:'30',
-      t_sfN:'9',t_sfBuy:'4.3',t_sfSell:'1.7',t_sfHold:'19',t_twSF:'7/10/6.5/29.5/29/26/26/29/15.5',
-      t_mdN:'7',t_mdBuy:'4.2',t_mdSell:'3.7',t_mdHold:'5',t_twMD:'22.5/14/12/20/26/6/24',
-      t_agN:'9',t_agBuy:'4.9',t_agSell:'2.4',t_agHold:'35',t_twAG:'6/7/8/29/25/25/9/20/10'}}
+      t_agN:'9',t_agBuy:'-0.01/1',t_agSell:'0.01/4',t_agHold:'50',t_twAG:'6/13/13/13/13/12/12/12/6'}}
   ]
 };
 function applyPreset(id, presetId){
@@ -3595,7 +3675,7 @@ function getPresetStore(){
   }
   Object.keys(PRESETS).forEach(t=>{ if(!o.types[t]) o.types[t]=[]; });
   // 새로 추가된 기본 프리셋을 기존 저장소에 1회 병합 (버전 올릴 때만)
-  const BUILTIN_VER=3;
+  const BUILTIN_VER=2;
   if((o.builtinVer||1)<BUILTIN_VER){
     Object.keys(PRESETS).forEach(t=>{
       (PRESETS[t]||[]).forEach((pr,i)=>{
@@ -3794,6 +3874,35 @@ function dualP(){ return {nAtk:gi("d_nAtk"),atkBuy:gf("d_atkBuy"),atkBuyNeg:gf("
   atkW:gv("d_atkW"),defW:gv("d_defW"),initCap:30000,fee:getFeeRate()}; }
 function dongpaP(){ return {safeBuy:gf("g_safeBuy"),aggBuy:gf("g_aggBuy"),safeProfit:gf("g_safeProfit"),aggProfit:gf("g_aggProfit"),
   safeHold:gi("g_safeHold"),aggHold:gi("g_aggHold"),cycle:gi("g_cycle"),nPos:gi("g_nPos"),initCap:30000,fee:getFeeRate()}; }
+
+// ===== 떨프 티어 비중 (% · 기본 균등 100÷분할수) =====
+let TWDF=[];
+function twdfEnsure(nN){
+  if(!Array.isArray(TWDF)) TWDF=[];
+  const eq=Math.round((100/nN)*10)/10;
+  if(TWDF.length<nN){ for(let i=TWDF.length;i<nN;i++) TWDF.push(eq); }
+  if(TWDF.length>nN) TWDF=TWDF.slice(0,nN);
+  return TWDF;
+}
+function renderTwDf(){
+  const el=document.getElementById('tw-df'); if(!el) return;
+  const nN=gi('df_nPos')||6;
+  const w=twdfEnsure(nN);
+  let cells='';
+  for(let i=0;i<nN;i++) cells+=`<div class="tw-cell"><span>T${i+1}</span><input type="number" step="0.1" value="${w[i]}" onchange="setTwDf(${i},this.value)"></div>`;
+  const sum=w.reduce((a,b)=>a+(+b||0),0);
+  el.innerHTML=`<div class="twh">티어 비중 (%)</div><div class="tw-grid">${cells}</div><div class="tw-sum">합계 ${sum.toFixed(1)}% <span style="opacity:.7">(균등 기본 ${(100/nN).toFixed(1)}% · 각 티어가 베이스 대비 이 %만큼 매수)</span></div>`;
+}
+function setTwDf(i,v){ twdfEnsure(gi('df_nPos')||6); TWDF[i]=parseFloat(v)||0; renderTwDf(); run(); }
+function twdfReset(){ TWDF=[]; renderTwDf(); run(); }
+function dropfP(){
+  const nN=gi('df_nPos')||6;
+  const w=twdfEnsure(nN);
+  return {buy:gf('df_buy')/100, sell:gf('df_sell')/100, hold:gi('df_hold'), nPos:nN,
+    weight:w.slice(0,nN).map(x=>x/100),
+    comp_rate:gf('df_comp')/100, loss_rate:gf('df_loss')/100,
+    initCap:30000, fee:getFeeRate()};
+}
 // 3모드 분할 비중 (% 단위, 디폴트 = 원래 최적화 값). 사용자가 수정 가능.
 const TW_DEFAULT={
   SF:[7.0,10.0,6.5,29.5,29.0,26.0,26.0,29.0,15.5],
@@ -3846,6 +3955,8 @@ function renderTw(){
   });
 }
 function setTw(mode,i,v){ TW[mode][i]=parseFloat(v)||0; renderTw(); run(); }
+// 3모드 비중 렌더 시 떨프 비중도 같이 갱신
+(function(){ const _rt=renderTw; renderTw=function(){ _rt(); try{ renderTwDf(); }catch(e){} }; })();
 
 // ===== 백테스트 날짜(연도) 구간 =====
 const DATA_Y0=2016, DATA_Y1=(function(){ let m=2016; DATA.forEach(r=>{ if(r[6]!==1){ const y=2000+parseInt(r[0].slice(0,2)); if(y>m)m=y; } }); return m; })();
@@ -4103,6 +4214,7 @@ function drawChart(years,results,port,active){
 const DEFAULTS={d_nAtk:"6",d_atkBuy:"8.0",d_atkBuyNeg:"-0.1",d_sellA:"0.4",d_holdA:"2.0",d_nDef:"5",d_defHold:"8",
   d_defBuy1:"-0.6",d_defBuy2:"5.5",d_defSell:"0.7",d_maN:"3",d_atkW:"",d_defW:"6/13/20/27/34",
   g_safeBuy:"6.5",g_safeProfit:"0.9",g_safeHold:"28",g_aggBuy:"3.5",g_aggProfit:"4.9",g_aggHold:"7",g_cycle:"10",g_nPos:"6",
+  df_nPos:"6",df_buy:"-3",df_sell:"3",df_hold:"20",df_comp:"100",df_loss:"100",
   t_rsiMin:"46",t_rsiMax:"64",t_sfN:"9",t_sfBuy:"4.3",t_sfSell:"1.7",t_sfHold:"19",t_mdN:"7",t_mdBuy:"4.2",t_mdSell:"3.7",t_mdHold:"5",
   t_agN:"9",t_agBuy:"4.9",t_agSell:"2.4",t_agHold:"35",t_comp:"80",t_loss:"30"};
 function resetAll(){ for(const k in DEFAULTS) document.getElementById(k).value=DEFAULTS[k];
@@ -4455,6 +4567,7 @@ function saveAll(){
   // 백테스트 비중/on, 3모드 티어비중, 수수료
   const slots=SLOTS.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on,w:s.w,presetId:s.presetId||null,params:JSON.parse(JSON.stringify(s.params||{}))}));
   const tw=JSON.parse(JSON.stringify(TW));
+  const twdf=JSON.parse(JSON.stringify(TWDF||[]));
   const fee={on:(document.getElementById('fee-on')||{}).checked||false,
              pct:(document.getElementById('fee-pct')||{}).value||'0.015'};
   // 초기 로딩 중의 자동저장은 '사용자 수정'이 아니므로 저장시각을 갱신하지 않음
@@ -4463,7 +4576,7 @@ function saveAll(){
   if(!_initDone){
     try{ const prev=JSON.parse(ls.getItem(LS_KEY)); savedAt=(prev&&prev.savedAt)?prev.savedAt:0; }catch(e){ savedAt=0; }
   }
-  const payload={acct, params, curAcct:_curAcct, slots, tw, fee, savedAt};
+  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, fee, savedAt};
   try{ ls.setItem(LS_KEY, JSON.stringify(payload)); }catch(e){}
   wsStoreActive(payload); // 현재 설정 탭에도 자동저장
   if(_initDone) cloudSchedulePush(); // 클라우드 자동 업로드 (디바운스)
@@ -4491,6 +4604,7 @@ function loadAll(){
   }
   // 3모드 티어비중 복원
   if(d.tw){ for(const m in d.tw){ if(TW[m]&&Array.isArray(d.tw[m])) TW[m]=d.tw[m].slice(); } }
+  if(Array.isArray(d.twdf)) TWDF=d.twdf.slice();
   // 수수료 복원
   if(d.fee){ const fo=document.getElementById('fee-on'), fp=document.getElementById('fee-pct');
     if(fo) fo.checked=!!d.fee.on; if(fp&&d.fee.pct!=null) fp.value=d.fee.pct; }
@@ -5009,6 +5123,14 @@ const PARAM_GROUPS=[
   {name:'동파 · 공통', rows:[
     ['g_nPos','분할개수','티어 수'],
     ['g_cycle','복리정산주기','거래일'],
+  ]},
+  {name:'떨프 (모드없음)', rows:[
+    ['df_nPos','분할수','티어 수'],
+    ['df_buy','매수율','전일比 하락 % (예: -3)'],
+    ['df_sell','매도율','익절 %'],
+    ['df_hold','손절일','보유한계(일)'],
+    ['df_comp','복리비중','이익 반영 %'],
+    ['df_loss','손실비중','손실 반영 %'],
   ]},
   {name:'3모드 · 모드판정', rows:[
     ['t_rsiMin','RSI Min','이하면 바닥(SF)'],
