@@ -37,7 +37,8 @@ tr:last-child td{border-bottom:0}
 .pos{color:var(--up)} .neg{color:var(--dn)}
 .tgl{font-size:12px;color:var(--acc);font-weight:700;cursor:pointer;user-select:none}
 .scroll{max-height:320px;overflow:auto;margin-top:8px}
-canvas{width:100%}
+canvas{width:100%;display:block}
+#scanRet{height:95px}#scanCnt,#scanWorst{height:80px}
 .foot{font-size:10.5px;color:var(--mut);line-height:1.7;margin-top:8px}
 .addrow{display:grid;grid-template-columns:1.3fr 1fr auto;gap:6px;align-items:end}
 .addrow button{padding:10px;border:1px solid var(--acc);background:#e6f4f2;color:var(--acc);border-radius:10px;font:inherit;font-weight:700;cursor:pointer}
@@ -128,13 +129,34 @@ canvas{width:100%}
       <div class="hero"><div class="v" id="h_avg">–</div><div class="k">평단</div></div>
       <div class="hero" style="grid-column:span 2"><div class="v" id="h_val2" style="font-size:15px">–</div><div class="k">최저 손익 시점</div></div>
     </div>
+    <div class="heroes">
+      <div class="hero"><div class="v" id="h_bh">–</div><div class="k">바이앤홀드 수익률</div></div>
+      <div class="hero"><div class="v neg" id="h_bhmdd">–</div><div class="k">B&H MDD</div></div>
+      <div class="hero"><div class="v" id="h_bhdiff">–</div><div class="k">적립 − B&H</div></div>
+    </div>
     <div class="card">
       <div class="label">평가금(선) vs 투자금(점선)</div>
       <canvas id="chart" height="170"></canvas>
     </div>
     <div class="card">
       <div class="label">연도별</div>
-      <table><thead><tr><th>연도</th><th>매수</th><th>누적수익</th><th title="각 해에 산 것만으로 그 해 안에서 계산">연도독립</th><th title="연도독립 기준 그 해 최저 손익률">최저손익</th></tr></thead><tbody id="ybody"></tbody></table>
+      <table><thead><tr><th>연도</th><th>매수</th><th title="그 해 거래일 중 매수한 날의 비율">비율</th><th>누적수익</th><th title="각 해에 산 것만으로 그 해 안에서 계산">연도독립</th><th title="그 해 첫날 종가에 그 해 총투자금 넣고 연말까지 보유">B&H</th><th title="연도독립 기준 그 해 최저 손익률">최저손익</th></tr></thead><tbody id="ybody"></tbody></table>
+    </div>
+    <div class="card">
+      <div class="label" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📊 매수 하락%별 비교 <span id="scanperiod" style="font-size:10px;color:var(--mut)">(선택 기간 · 현재 매수방식)</span></span>
+        <span class="tgl" onclick="scanBuy()">분석 ▶</span>
+      </div>
+      <div id="scanwrap" class="hidden">
+        <div class="sub" style="margin:0 0 6px">가로축 = 하락 기준%. 각 기준으로 적립했을 때 결과</div>
+        <div style="font-size:11px;color:var(--sub);margin-bottom:4px">수익률 (%)</div>
+        <canvas id="scanRet" height="95"></canvas>
+        <div style="font-size:11px;color:var(--sub);margin:10px 0 4px">매수 횟수</div>
+        <canvas id="scanCnt" height="80"></canvas>
+        <div style="font-size:11px;color:var(--sub);margin:10px 0 4px">최저 손익률 (%)</div>
+        <canvas id="scanWorst" height="80"></canvas>
+        <div id="scantbl" style="margin-top:10px"></div>
+      </div>
     </div>
     <div class="card">
       <div class="label" style="display:flex;justify-content:space-between;align-items:center">
@@ -159,7 +181,7 @@ canvas{width:100%}
       <div class="label">일간 등락률 표준편차 · 종가 vs 저가</div>
       <div class="sub" style="margin:0 0 10px">σ = 하루 등락률의 표준편차 · 저가는 전일 저가 대비 · 연율화 = σ×√252</div>
       <table>
-        <thead><tr><th>기간</th><th>종가 σ</th><th>저가 σ</th><th>종가 연율</th><th>저가 연율</th><th>거래일</th></tr></thead>
+        <thead><tr><th>기간</th><th>종가 σ</th><th>저가 σ</th><th title="종가σ 기준">종1σ</th><th>종1.5σ</th><th>종2σ</th><th title="저가σ 기준">저1σ</th><th>저1.5σ</th><th>저2σ</th><th>거래일</th></tr></thead>
         <tbody id="volbody"></tbody>
       </table>
     </div>
@@ -333,6 +355,7 @@ function calcDrop(){
       const roi=(val/inv-1)*100; if(roi<worstRoi){ worstRoi=roi; worstDate=r.d; }
       series.push({d:r.d,val,inv}); }
     const yy=(yearly[r.y]=yearly[r.y]||{cnt:0}); yy.endVal=sh*r.c; yy.endInv=inv;
+    yy.days=(yy.days||0)+1; if(events.length>0) yy.buyDays=(yy.buyDays||0)+1;
   });
   // ===== 연도별 독립 (각 해를 그 해에 산 것만으로 그 해 안에서 계산) =====
   const byYear={};
@@ -355,8 +378,22 @@ function calcDrop(){
     yearly[y].indInv=iinv; yearly[y].indVal=ish*lastC;
     yearly[y].indRoi=iinv>0?(ish*lastC/iinv-1)*100:null;
     yearly[y].indMdd=imdd; yearly[y].indWorst=(iworst===999?0:iworst);
+    // 그 해 바이앤홀드: 연 첫 거래일 종가에 그 해 총투자금 투입, 연말까지 보유
+    if(iinv>0){ const fc=yr[0].c; yearly[y].bhRoi=(lastC/fc-1)*100; }
+    else yearly[y].bhRoi=null;
   });
-  return {rows,buys,series,yearly,sh,inv,mdd,worstRoi:(worstRoi===999?0:worstRoi),worstDate,last:rows[rows.length-1]};
+  // ===== 바이앤홀드: 기간 첫날 종가에 총투자금만큼 한번에 매수, 끝까지 보유 =====
+  let bh=null;
+  if(rows.length>0 && inv>0){
+    const firstC=rows[0].c, lastC=rows[rows.length-1].c;
+    const bhShares=inv/firstC;
+    const bhVal=bhShares*lastC;
+    const bhRoi=(lastC/firstC-1)*100;
+    let bpeak=firstC, bmdd=0;
+    rows.forEach(r=>{ if(r.c>bpeak)bpeak=r.c; const dd=(r.c/bpeak-1)*100; if(dd<bmdd)bmdd=dd; });
+    bh={roi:bhRoi, val:bhVal, mdd:bmdd};
+  }
+  return {rows,buys,series,yearly,sh,inv,mdd,worstRoi:(worstRoi===999?0:worstRoi),worstDate,last:rows[rows.length-1],bh};
 }
 
 // ===== 부분매도 추천 (현재 매수조건, 1회 매도, 최적 X%/Y% 탐색) =====
@@ -419,18 +456,39 @@ function renderDrop(){
   $('h_worst').textContent=(R.worstRoi>=0?'+':'')+R.worstRoi.toFixed(1)+'%';
   $('h_worst').className='v '+cls(R.worstRoi);
   $('h_avg').textContent=R.sh>0?'$'+(R.inv/R.sh).toFixed(2):'–';
+  // 바이앤홀드 비교
+  if(R.bh){
+    $('h_bh').textContent=(R.bh.roi>=0?'+':'')+R.bh.roi.toFixed(1)+'%';
+    $('h_bh').className='v '+(R.bh.roi>=0?'pos':'neg');
+    $('h_bhmdd').textContent=R.bh.mdd.toFixed(1)+'%';
+    const diff=ret-R.bh.roi;  // 적립 수익률 - B&H 수익률
+    $('h_bhdiff').textContent=(diff>=0?'+':'')+diff.toFixed(1)+'%p';
+    $('h_bhdiff').className='v '+(diff>=0?'pos':'neg');
+  } else { $('h_bh').textContent='–'; $('h_bhmdd').textContent='–'; $('h_bhdiff').textContent='–'; }
   const wd=R.worstDate; $('h_val2').textContent=wd?dstr(wd):'–';
   const yb=$('ybody'); yb.innerHTML='';
+  const totCnt=Object.keys(R.yearly).reduce((s,y)=>s+(R.yearly[y].cnt||0),0);
+  const totDays=Object.keys(R.yearly).reduce((s,y)=>s+(R.yearly[y].days||0),0);
+  const totBuyDays=Object.keys(R.yearly).reduce((s,y)=>s+(R.yearly[y].buyDays||0),0);
   Object.keys(R.yearly).sort().forEach(y=>{ const v=R.yearly[y]; const cum=v.endInv>0?(v.endVal/v.endInv-1)*100:null;
     const ind=(v.indRoi!==undefined&&v.indRoi!==null)?v.indRoi:null;
     const iw=(v.indWorst!==undefined)?v.indWorst:null;
+    // 비율 = 그 해 매수한 날 / 그 해 거래일
+    const pct=(v.days>0)?((v.buyDays||0)/v.days*100):0;
     yb.innerHTML+=`<tr><td>${y}</td><td>${v.cnt}회</td>`+
+      `<td style="color:var(--sub)" title="${v.buyDays||0}/${v.days||0}일">${pct.toFixed(0)}%</td>`+
       `<td class="${cum!==null?cls(cum):''}">${cum!==null?(cum>=0?'+':'')+cum.toFixed(1)+'%':'–'}</td>`+
       `<td class="${ind!==null?cls(ind):''}">${ind!==null?(ind>=0?'+':'')+ind.toFixed(1)+'%':'–'}</td>`+
+      `<td class="${v.bhRoi!=null?cls(v.bhRoi):''}">${v.bhRoi!=null?(v.bhRoi>=0?'+':'')+v.bhRoi.toFixed(1)+'%':'–'}</td>`+
       `<td class="${iw!==null&&iw<0?'neg':''}">${iw!==null?iw.toFixed(1)+'%':'–'}</td></tr>`; });
+  // 합계 행 (전체 매수한 날/전체 거래일)
+  if(totCnt>0){ const tpct=totDays>0?(totBuyDays/totDays*100):0;
+    yb.innerHTML+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td>합계</td><td>${totCnt}회</td><td style="color:var(--sub)">${tpct.toFixed(0)}%</td><td colspan="4"></td></tr>`; }
   const showKind=(C().mode==='AB');
   $('buybody').innerHTML=R.buys.map(b=>`<tr><td>${dstr(b.d)}${showKind&&b.kind?' <span style="color:var(--mut);font-size:10px">'+b.kind+'</span>':''}</td><td>$${b.c.toFixed(2)}</td><td class="neg">${b.chg.toFixed(1)}%</td><td>${b.q.toFixed(1)}</td><td>${b.cum.toFixed(0)}</td></tr>`).join('');
   drawLine(R.series);
+  // 스캔이 펼쳐져 있으면 기간·조건 변경 반영해 다시 계산
+  const sw=$('scanwrap'); if(sw && !sw.classList.contains('hidden')) scanBuy(true);
 }
 function drawLine(sr){
   const cv=$('chart'); const dpr=window.devicePixelRatio||1; const W=cv.clientWidth||520,H=170;
@@ -448,6 +506,67 @@ function drawLine(sr){
   ctx.fillText('20'+sr[0].d.slice(0,2), pad.l, H-4); ctx.fillText('20'+last.d.slice(0,2), W-34, H-4);
 }
 
+// ===== 매수 하락%별 스캔 =====
+function scanBuy(keepOpen){
+  const wrap=$('scanwrap');
+  if(!keepOpen){ wrap.classList.toggle('hidden'); }
+  if(wrap.classList.contains('hidden')) return;
+  const cf=C();
+  const sp=$('scanperiod'); if(sp) sp.textContent=`(${cf.y0}~${cf.y1} · ${cf.mode==='A'?'장중':cf.mode==='B'?'종가':'둘다'})`;
+  // 하락% 후보: -3 ~ -20 (0.5단위는 너무 많으니 1단위)
+  const cands=[];
+  for(let p=-3;p>=-20;p--) cands.push(p);
+  const rows=[];
+  const bakTh=cf.th, bakThA=cf.thA, bakThB=cf.thB;
+  cands.forEach(p=>{
+    // 현재 매수방식 유지, 하락%만 교체 (AB면 A/B 동일하게 p)
+    cf.th=p; cf.thA=p; cf.thB=p;
+    const R=calcDrop();
+    const roi=R.inv>0?(R.sh*R.last.c/R.inv-1)*100:0;
+    rows.push({p, roi, cnt:R.buys.length, worst:R.worstRoi, inv:R.inv});
+  });
+  cf.th=bakTh; cf.thA=bakThA; cf.thB=bakThB;
+  // 그래프 3개 (펼침 직후 clientWidth 확보 위해 다음 프레임에 그림)
+  const drawScan=()=>{
+    barChart('scanRet', rows.map(r=>r.p+'%'), rows.map(r=>r.roi), rows.map(r=>r.roi>=0?'#0f766e':'#dc2626'), '%');
+    barChart('scanCnt', rows.map(r=>r.p+'%'), rows.map(r=>r.cnt), rows.map(()=>'#6366f1'), '회');
+    barChart('scanWorst', rows.map(r=>r.p+'%'), rows.map(r=>r.worst), rows.map(()=>'#f59e0b'), '%');
+  };
+  requestAnimationFrame(()=>requestAnimationFrame(drawScan));
+  // 표
+  let t='<table style="font-size:11px"><thead><tr><th>하락%</th><th>수익률</th><th>매수</th><th>최저손익</th><th>투자금</th></tr></thead><tbody>';
+  rows.forEach(r=>{ t+=`<tr><td>${r.p}%</td><td class="${r.roi>=0?'pos':'neg'}">${r.roi>=0?'+':''}${r.roi.toFixed(1)}%</td><td>${r.cnt}회</td><td class="${r.worst<0?'neg':''}">${r.worst.toFixed(1)}%</td><td style="color:var(--mut)">${money(r.inv)}</td></tr>`; });
+  t+='</tbody></table>';
+  $('scantbl').innerHTML=t;
+}
+function barChart(id, labels, vals, colors, unit){
+  const cv=$(id); if(!cv) return;
+  const dpr=window.devicePixelRatio||1;
+  let W=cv.clientWidth; if(!W||W<50){ W=(cv.parentElement&&cv.parentElement.clientWidth)||340; }
+  const H=parseInt(cv.getAttribute('height'))||90;
+  cv.width=W*dpr; cv.height=H*dpr; cv.style.height=H+'px';
+  const ctx=cv.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr); ctx.clearRect(0,0,W,H);
+  const pad={l:38,r:8,t:8,b:20};
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  const mx=Math.max(0,...vals), mn=Math.min(0,...vals);
+  const range=(mx-mn)||1;
+  const y0=pad.t+ch*(mx/range); // 0선 위치
+  // 0선
+  ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pad.l,y0); ctx.lineTo(W-pad.r,y0); ctx.stroke();
+  // y축 라벨(최대/최소)
+  ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif'; ctx.textAlign='right';
+  ctx.fillText(mx.toFixed(0)+unit, pad.l-4, pad.t+8);
+  ctx.fillText(mn.toFixed(0)+unit, pad.l-4, pad.t+ch);
+  const n=vals.length; const bw=cw/n*0.7, gap=cw/n;
+  vals.forEach((v,i)=>{
+    const x=pad.l+gap*i+(gap-bw)/2;
+    const bh=Math.abs(v)/range*ch;
+    const y=v>=0?y0-bh:y0;
+    ctx.fillStyle=colors[i]; ctx.fillRect(x,y,bw,bh);
+    // x라벨 (2칸마다)
+    if(i%2===0){ ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textAlign='center'; ctx.fillText(labels[i], x+bw/2, H-6); }
+  });
+}
 // ===== 변동성 =====
 function stdev(a){ if(a.length<2)return 0; const m=a.reduce((x,y)=>x+y,0)/a.length; return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); }
 function calcVol(){
@@ -479,10 +598,17 @@ function renderVol(){
   $('hist-title').textContent='등락률 분포 (최근 1년 · '+baseTxt+')';
   const tb=$('volbody'); tb.innerHTML='';
   [1,2,3,4,5].forEach(yr=>{ const r=V.res[yr];
-    tb.innerHTML+=`<tr><td>최근 ${yr}년</td><td>${r.stdC.toFixed(2)}%</td><td>${r.stdL.toFixed(2)}%</td><td>${r.annC.toFixed(1)}%</td><td>${r.annL.toFixed(1)}%</td><td>${r.n}</td></tr>`; });
+    tb.innerHTML+=`<tr><td>최근 ${yr}년</td><td>${r.stdC.toFixed(2)}%</td><td>${r.stdL.toFixed(2)}%</td>`+
+      `<td class="neg">-${r.stdC.toFixed(1)}%</td>`+
+      `<td class="neg">-${(1.5*r.stdC).toFixed(1)}%</td>`+
+      `<td class="neg">-${(2*r.stdC).toFixed(1)}%</td>`+
+      `<td class="neg">-${r.stdL.toFixed(1)}%</td>`+
+      `<td class="neg">-${(1.5*r.stdL).toFixed(1)}%</td>`+
+      `<td class="neg">-${(2*r.stdL).toFixed(1)}%</td>`+
+      `<td>${r.n}</td></tr>`; });
   // σ 구간표 (최근 1년, 하락 방향)
   const sb=$('volsigbody'); const r1=V.res[1];
-  sb.innerHTML=[1,1.5,2,2.5,3].map(k=>
+  sb.innerHTML=[1,1.5,2].map(k=>
     `<tr><td>${k}σ</td><td class="neg">-${(k*r1.stdC).toFixed(1)}%</td><td class="neg">-${(k*r1.stdL).toFixed(1)}%</td></tr>`
   ).join('');
   const c1=V.res[1].chgs; const st=$('volstat');
