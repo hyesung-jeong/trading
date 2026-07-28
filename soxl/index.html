@@ -338,7 +338,7 @@
       <div class="twocol">
         <div class="panel">
           <div class="panel-h">연도별 성과 · 포트폴리오</div>
-          <table><thead><tr><th>연도</th><th>수익률</th><th>최고수익</th><th>최저수익</th><th>MDD</th><th>Calmar</th></tr></thead>
+          <table><thead><tr><th>연도</th><th>수익률</th><th>최고수익</th><th>최저수익</th><th>MDD</th><th title="그 해 전고점 회복까지 최장 물속 기간(거래일)">언더워터</th><th>Calmar</th></tr></thead>
           <tbody id="yearbody"></tbody></table>
         </div>
         <div class="panel">
@@ -555,6 +555,106 @@ function runDual(rows, P){
   aggRes.tlog=tlog;
   return aggRes;
 }
+// ===== 듀얼 + 세컨 결합 엔진 =====
+// 메인 듀얼을 돌리며 '현재 모드의 티어가 모두 찬 상태(풀티어)'를 추적, 세컨을 조건부 가동.
+// 세컨 진입: 메인 풀티어된 다음 거래일부터. 정지: 메인·세컨 둘다 전 포지션 0.
+function runDualSecond(rows, P, wMainFrac, wSecFrac){
+  const fee=P.fee||0; const n=rows.length;
+  const closes=rows.map(r=>r[1]); const modes=rows.map(r=>r[2]); const rsis=rows.map(r=>r[3]);
+  const warm=rows.map(r=>r[6]===1); const years=rows.map(r=>2000+parseInt(r[0].slice(0,2)));
+  const ma5=new Array(n).fill(NaN);
+  for(let i=4;i<n;i++){ ma5[i]=(closes[i]+closes[i-1]+closes[i-2]+closes[i-3]+closes[i-4])/5; }
+  const fiArr=new Array(n).fill(0);
+  for(let i=1;i<n;i++){ fiArr[i]=closes[i]>closes[i-1]?1:(closes[i]<closes[i-1]?-1:0); }
+  const nA=P.nAtk,nD=P.nDef,maN=P.maN;
+  const atkW=parseW(P.atkW,nA),defW=parseW(P.defW,nD);
+  const buyF1=1.0+P.defBuy1/100.0, sellFd=1.0+P.defSell/100.0;
+  let startI=0; while(startI<n && (warm[startI]||startI<Math.max(5,maN))) startI++;
+
+  // 서브엔진 = 듀얼 한 세트 (자본 cap)
+  function mkD(cap){ return {cash:cap, prevCash:cap, initCap:cap,
+    aocc:arr(nA,false),abp:arr(nA,0),ash:arr(nA,0),adays:arr(nA,0),aspct:arr(nA,0),ahold:arr(nA,0),
+    docc:arr(nD,false),dbp:arr(nD,0),dsh:arr(nD,0),ddays:arr(nD,0), active:true, everStarted:false }; }
+  function resetD(E){ E.cash=E.initCap;E.prevCash=E.initCap;
+    E.aocc=arr(nA,false);E.abp=arr(nA,0);E.ash=arr(nA,0);E.adays=arr(nA,0);E.aspct=arr(nA,0);E.ahold=arr(nA,0);
+    E.docc=arr(nD,false);E.dbp=arr(nD,0);E.dsh=arr(nD,0);E.ddays=arr(nD,0); }
+  function posCount(E){ let c=0; for(let k=0;k<nA;k++)if(E.aocc[k])c++; for(let k=0;k<nD;k++)if(E.docc[k])c++; return c; }
+  // 현재 모드 기준 풀티어 여부
+  function isFull(E,mode){ if(mode===1){ for(let k=0;k<nA;k++) if(!E.aocc[k]) return false; return true; }
+    else { for(let k=0;k<nD;k++) if(!E.docc[k]) return false; return true; } }
+
+  // 하루 듀얼 스텝 (한 서브엔진). 매수/매도 로직은 runDual과 동일
+  function stepD(E,i,isSec){
+    if(!E.active) return;
+    const close=closes[i], mode=modes[i];
+    const prevClose=closes[i-1], prevMa5=ma5[i-1], prevFi=fiArr[i-1];
+    let sumPrev=0; for(let k=i-maN+1;k<i;k++) sumPrev+=closes[k];
+    for(let k=0;k<nA;k++) if(E.aocc[k]) E.adays[k]++;
+    for(let k=0;k<nD;k++) if(E.docc[k]) E.ddays[k]++;
+    const aoccSnap=E.aocc.slice(), doccSnap=E.docc.slice();
+    let hasMoc=false;
+    for(let k=0;k<nA;k++) if(E.aocc[k]&&E.adays[k]>=E.ahold[k]) hasMoc=true;
+    for(let k=0;k<nD;k++) if(E.docc[k]&&E.ddays[k]>=P.defHold) hasMoc=true;
+    if(hasMoc){
+      for(let k=0;k<nA;k++) if(E.aocc[k]&&E.adays[k]>=E.ahold[k]){E.cash+=E.ash[k]*close*(1-fee);E.aocc[k]=false;}
+      for(let k=0;k<nD;k++) if(E.docc[k]&&E.ddays[k]>=P.defHold){E.cash+=E.dsh[k]*close*(1-fee);E.docc[k]=false;}
+    } else {
+      const holdT1=(mode===1)&&!isNaN(prevMa5)&&(prevClose>prevMa5);
+      for(let k=0;k<nA;k++){ if(!E.aocc[k])continue; if(k===0&&holdT1)continue;
+        if(close>=E.abp[k]*(1.0+E.aspct[k]/100.0)){E.cash+=E.ash[k]*close*(1-fee);E.aocc[k]=false;} }
+      let anyDef=false; for(let k=0;k<nD;k++) if(E.docc[k])anyDef=true;
+      const defHoldT1=!isNaN(prevMa5)&&(prevClose>prevMa5);
+      if(anyDef){ const order=sellFd*sumPrev/(maN-sellFd);
+        if(close>=order){ for(let k=0;k<nD;k++){ if(!E.docc[k])continue; if(k===0&&defHoldT1)continue;
+          E.cash+=E.dsh[k]*close*(1-fee);E.docc[k]=false;} } }
+    }
+    if(mode===1){
+      let slot=-1; for(let k=0;k<nA;k++) if(!aoccSnap[k]){slot=k;break;}
+      if(slot>=0&&!E.aocc[slot]){ let wsum=0; for(let k=0;k<nA;k++) if(!aoccSnap[k])wsum+=atkW[k];
+        const alloc=E.prevCash*(atkW[slot]/wsum);
+        const order=prevClose*(1.0+(prevFi>=0?P.atkBuy:P.atkBuyNeg)/100.0);
+        if(close<=order&&alloc>0){ const sh=Math.floor(alloc/order); const inv=sh*close;
+          if(sh>0&&inv*(1+fee)<=E.cash){ let x=(rsis[i]-35.0)/30.0; if(x<0)x=0; if(x>1)x=1;
+            E.aocc[slot]=true;E.abp[slot]=close;E.ash[slot]=sh;E.adays[slot]=0;
+            E.aspct[slot]=0.1+2.9*Math.pow(1.0-x,1.0/P.sellA);
+            E.ahold[slot]=Math.floor(7.0+23.0*Math.pow(1.0-x,1.0/P.holdA)+0.5);
+            E.cash-=inv*(1+fee); if(isSec)E.everStarted=true;} } }
+    } else {
+      let slot=-1; for(let k=0;k<nD;k++) if(!doccSnap[k]){slot=k;break;}
+      if(slot>=0&&!E.docc[slot]){ let wsum=0; for(let k=0;k<nD;k++) if(!doccSnap[k])wsum+=defW[k];
+        const alloc=E.prevCash*(defW[slot]/wsum);
+        const c1=buyF1*sumPrev/(maN-buyF1); const c2=prevClose*(1.0+P.defBuy2/100.0);
+        const order=c1<c2?c1:c2;
+        if(close<=order&&alloc>0){ const sh=Math.floor(alloc/order); const inv=sh*close;
+          if(sh>0&&inv*(1+fee)<=E.cash){ E.docc[slot]=true;E.dbp[slot]=close;E.dsh[slot]=sh;E.ddays[slot]=0;
+            E.cash-=inv*(1+fee); if(isSec)E.everStarted=true;} } }
+    }
+    let holdSh=0; for(let k=0;k<nA;k++) if(E.aocc[k])holdSh+=E.ash[k];
+    for(let k=0;k<nD;k++) if(E.docc[k])holdSh+=E.dsh[k];
+    E.assetNow=E.cash+holdSh*close;
+    E.prevCash=E.cash;
+  }
+
+  const totalCap=P.initCap;
+  const M=mkD(totalCap*wMainFrac), S=mkD(totalCap*wSecFrac); S.active=false;
+  let curYear=years[startI]; let mainFullPrev=false;
+  const daily=[];
+  for(let i=startI;i<n;i++){
+    if(warm[i]) continue;
+    if(years[i]!==curYear){ resetD(M); resetD(S); S.active=false; S.everStarted=false; mainFullPrev=false; curYear=years[i]; }
+    const mode=modes[i];
+    stepD(M,i,false);
+    const mainFullNow=isFull(M,mode);
+    if(!S.active && mainFullPrev){ S.active=true; }
+    stepD(S,i,true);
+    if(S.active && S.everStarted && posCount(M)===0 && posCount(S)===0){ S.active=false; S.everStarted=false; }
+    const mAsset=(M.assetNow!==undefined?M.assetNow:M.cash);
+    const sAsset=S.active||posCount(S)>0?(S.assetNow!==undefined?S.assetNow:S.cash):S.cash;
+    daily.push({ymd:rows[i][0], year:years[i], asset:mAsset+sAsset});
+    mainFullPrev=mainFullNow;
+  }
+  return aggregate(daily, totalCap);
+}
 const FEE=0.00044+0.00044*0+0.0000278; // 매수수수료 근사 (검증에서 보정)
 function arr(n,v){return new Array(n).fill(v);}
 function parseW(s,n){ if(!s||!s.trim()) return arr(n,1);
@@ -598,6 +698,96 @@ function runDongpa(rows, P){
     r.series.forEach(d=>{ series[d.ymd]=d.mult; }); });
   return {yearly, years, series, tlog};
 }
+// ===== 동파 + 세컨 결합 엔진 =====
+// 메인 동파를 돌리며 풀티어/전량현금 상태를 추적, 세컨을 조건부 가동.
+// wMain/wSec: 비중 배분 (합=원래 슬롯 비중). 세컨 자본은 이어짐(연도 내).
+function runDongpaSecond(rows, P, wMainFrac, wSecFrac){
+  const drAll=[]; for(let i=0;i<rows.length;i++) drAll.push(i===0?0:(rows[i][1]/rows[i-1][1]-1)*100);
+  const byYear={}; const firstIdxOfYear={};
+  rows.forEach((r,i)=>{ if(r[6]===1) return; const y=2000+parseInt(r[0].slice(0,2));
+    if(!(y in byYear)){ byYear[y]=[]; firstIdxOfYear[y]=i; } byYear[y].push({r:r, dr:drAll[i]}); });
+  const years=Object.keys(byYear).map(Number).sort((a,b)=>a-b);
+  const yearly={}; const series={}; const tlog=[];
+  years.forEach(y=>{
+    let pyc=0; const fi=firstIdxOfYear[y]; if(fi>0) pyc=rows[fi-1][1];
+    const r=btYearSecond(byYear[y],P,tlog,pyc,wMainFrac,wSecFrac);
+    yearly[y]={ret:r.ret,mdd:r.mdd,maxRet:r.maxRet,minRet:r.minRet};
+    r.series.forEach(d=>{ series[d.ymd]=d.mult; }); });
+  return {yearly, years, series, tlog};
+}
+// 한 해 안에서 메인+세컨을 동시에 시뮬레이션
+function btYearSecond(items,P,tlog,prevYearClose,wMainFrac,wSecFrac){
+  const fee=P.fee||0; const n=items.length;
+  const closes=items.map(o=>o.r[1]); const dmodes=items.map(o=>o.r[5]); const drets=items.map(o=>o.dr);
+  const totalCap=P.initCap;
+  const capMain=totalCap*wMainFrac, capSec=totalCap*wSecFrac;
+  // 서브 엔진 상태 팩토리
+  function mkEngine(cap){ return {investBase:cap, cash:cap, posSize:cap/P.nPos, periodPnl:0, positions:{}, active:true, everStarted:false}; }
+  const M=mkEngine(capMain);            // 메인: 항상 가동
+  const S=mkEngine(capSec); S.active=false; S.cash=capSec; // 세컨: 대기로 시작
+  let peak=totalCap, maxDD=0, minTotal=totalCap;
+  let prevClose=prevYearClose||0;
+  const series=[];
+  let mainFullPrevDay=false; // 전일 메인이 풀티어였나
+  function stepEngine(E, price, dret, mode, dayNum, isSecond){
+    if(!E.active) return;
+    if(dayNum>10 && (dayNum-1)%P.cycle===0){ E.investBase+=E.periodPnl; E.posSize=E.investBase/P.nPos; E.periodPnl=0; }
+    const posBeforeSell=Object.keys(E.positions).length;
+    let soldToday=false; const toRemove=[];
+    for(const t in E.positions){ const p=E.positions[t];
+      const holdDays=dayNum-p.bd; const profitPct=(price-p.bp)/p.bp*100;
+      let shouldSell=false;
+      if(p.bm===0) shouldSell=(profitPct>=P.safeProfit)||(holdDays>=P.safeHold);
+      else shouldSell=(profitPct>=P.aggProfit)||(holdDays>=P.aggHold);
+      if(shouldSell){ const sellAmt=p.sh*price*(1-fee); const pnl=sellAmt-p.inv;
+        E.cash+=sellAmt; E.periodPnl+=pnl; soldToday=true; toRemove.push(t); }
+    }
+    toRemove.forEach(t=>delete E.positions[t]);
+    if(!(posBeforeSell===P.nPos && soldToday)){
+      const canBuy=Object.keys(E.positions).length<P.nPos && E.cash>0;
+      if(canBuy){ let buyOk=false;
+        if(mode===0 && dret<P.safeBuy) buyOk=true; else if(mode===1 && dret<P.aggBuy) buyOk=true;
+        if(buyOk){ let availTier=-1; for(let t=1;t<=P.nPos;t++){ if(!(t in E.positions)){availTier=t;break;} }
+          if(availTier>0){ let maxBuyPrice; if(dayNum===1 && !prevYearClose) maxBuyPrice=price;
+            else maxBuyPrice=prevClose*(1.0+(mode===0?P.safeBuy:P.aggBuy)/100.0);
+            let curInv=0; for(const t in E.positions) curInv+=E.positions[t].inv;
+            const remBudget=E.investBase-curInv; const buyAmount=remBudget<E.posSize?remBudget:E.posSize;
+            const shares=Math.floor(buyAmount/maxBuyPrice);
+            if(shares>0){ const actualInv=shares*price; const buyCost=actualInv*(1+fee);
+              if(E.cash>=buyCost && buyCost<=buyAmount){ E.positions[availTier]={bp:price,sh:shares,bd:dayNum,inv:actualInv,bm:mode}; E.cash-=buyCost; if(isSecond)E.everStarted=true; } } } } }
+    }
+  }
+  for(let day=0;day<n;day++){
+    const price=closes[day], dret=drets[day], mode=dmodes[day], dayNum=day+1;
+    if(day===0 && !prevYearClose) prevClose=price;
+    // 1) 메인 스텝
+    stepEngine(M, price, dret, mode, dayNum, false);
+    const mainFullNow=(Object.keys(M.positions).length===P.nPos);
+    // 2) 세컨 활성화 판정: 전일 메인 풀티어였으면 오늘부터 세컨 가동
+    if(!S.active && mainFullPrevDay){ S.active=true; }
+    // 3) 세컨 스텝 (활성 상태일 때만)
+    stepEngine(S, price, dret, mode, dayNum, true);
+    // 4) 둘 다 포지션 0 → 세컨 정지 & 현금 회수 대기
+    const mEmpty=(Object.keys(M.positions).length===0), sEmpty=(Object.keys(S.positions).length===0);
+    if(S.active && S.everStarted && mEmpty && sEmpty){ S.active=false; S.everStarted=false; }
+    // 자산 집계
+    let mHold=0; for(const t in M.positions) mHold+=M.positions[t].sh*price;
+    let sHold=0; for(const t in S.positions) sHold+=S.positions[t].sh*price;
+    const total=M.cash+mHold+S.cash+sHold;
+    if(total>peak) peak=total; if(total<minTotal) minTotal=total;
+    if(peak>0){ const dd=(peak-total)/peak*100; if(dd>maxDD) maxDD=dd; }
+    series.push({ymd:items[day].r[0], mult:total/totalCap});
+    mainFullPrevDay=mainFullNow;
+    prevClose=price;
+  }
+  const fp=closes[n-1]; let cashEnd=M.cash+S.cash;
+  for(const t in M.positions) cashEnd+=M.positions[t].sh*fp;
+  for(const t in S.positions) cashEnd+=S.positions[t].sh*fp;
+  const ret=(cashEnd/totalCap-1)*100;
+  const maxRet=(peak/totalCap-1)*100; const minRet=(minTotal/totalCap-1)*100;
+  return {ret:ret, mdd:-maxDD, maxRet:maxRet, minRet:minRet, series:series};
+}
+
 function backtestYear(items,P,tlog,prevYearClose){
   const fee=P.fee||0;  // 매매수수료 (매수·매도 각각)
   const n=items.length;
@@ -901,8 +1091,12 @@ function runCash(){
 function runSlotEngine(slot){
   return withSlotParams(slot, ()=>{
     if(slot.type==='cash') return runCash();
-    if(slot.type==='dual'){ const dp=dualP(); return applyDualSheet(runDual(DATA,dp),dp); }
-    if(slot.type==='dongpa') return runDongpa(DATA,dongpaP());
+    if(slot.type==='dual'){ const dp=dualP();
+      if(slot.sec){ const sw=(slot.secW!==undefined?slot.secW:50)/100; return applyDualSheet(runDualSecond(DATA,dp,1-sw,sw),dp); }
+      return applyDualSheet(runDual(DATA,dp),dp); }
+    if(slot.type==='dongpa'){ const dp=dongpaP();
+      if(slot.sec){ const sw=(slot.secW!==undefined?slot.secW:50)/100; return runDongpaSecond(DATA,dp,1-sw,sw); }
+      return runDongpa(DATA,dp); }
     if(slot.type==='dropf') return runDropf(DATA,dropfP());
     if(slot.type==='three') return runThree(DATA,threeP());
     return null;
@@ -921,6 +1115,15 @@ function gi(id){return parseInt(gv(id));}
 function activeSlots(){ return SLOTS.filter(s=>s.on); }
 function toggleStrat(id){ const sl=slotById(id); if(!sl) return; sl.on=!sl.on;
   rebalanceWeights(); renderWeights(); run(); }
+function toggleSecond(id){ const sl=slotById(id); if(!sl||(sl.type!=='dongpa'&&sl.type!=='dual')) return;
+  sl.sec=!sl.sec; if(sl.sec && sl.secW===undefined) sl.secW=50; saveAll(); renderWeights(); run(); }
+function setSecW(id,v,from){ const sl=slotById(id); if(!sl) return; let w=parseFloat(v)||0; if(w<0)w=0; if(w>90)w=90; sl.secW=w;
+  // 슬라이더/숫자 상호 동기화 (지금 조작 중인 칸은 건드리지 않음)
+  const rng=document.getElementById('secrng-'+id); const num=document.getElementById('secnum-'+id); const lbl=document.getElementById('seclbl-'+id);
+  if(rng && from!=='range') rng.value=w;
+  if(num && from!=='num') num.value=w;
+  if(lbl) lbl.textContent='(메인 '+(100-w)+' / 세컨 '+w+')';
+  saveAll(); run(); }
 function rebalanceWeights(){ // 켜진 슬롯 균등 분배
   const on=activeSlots(); const cnt=on.length;
   if(cnt>0){ const base=Math.floor(100/cnt); let rem=100-base*cnt;
@@ -952,9 +1155,13 @@ function renderWeights(){
       <span class="dot ${cls}"></span>
       <input value="${s.name}" onchange="renameSlot('${s.id}',this.value)" style="flex:1;min-width:50px;border:none;background:transparent;color:var(--ink);font-weight:600;font-size:13px;padding:2px 4px">
       ${(function(){ const pl=slotPresetLabel(s); return pl?`<span onclick="openSlotParams('${s.id}')" title="적용된 프리셋 (* = 값 수정됨)" style="font-size:11px;padding:2px 7px;border-radius:9px;background:#eef4ff;color:#3b6fd4;border:1px solid #c9daf5;cursor:pointer;white-space:nowrap">${pl}</span>`:''; })()}
+      ${(s.type==='dongpa'||s.type==='dual')?`<button onclick="toggleSecond('${s.id}')" title="세컨: 메인이 풀티어된 다음날부터 추가 진입" style="border:1px solid ${s.sec?'var(--accent2)':'var(--line)'};background:${s.sec?'var(--accent2)':'var(--panel)'};color:${s.sec?'#fff':'var(--dim)'};cursor:pointer;font-size:11px;padding:2px 8px;border-radius:4px">세컨${s.sec?' ✓':''}</button>`:''}
       ${s.type!=='cash'?`<button onclick="openSlotParams('${s.id}')" style="border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;font-size:11px;padding:2px 8px;border-radius:4px">파라미터</button>`:''}
       <button onclick="removeSlot('${s.id}')" style="border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;padding:0 4px" title="삭제">×</button>
-    </div>`;
+    </div>${(s.type==='dongpa'||s.type==='dual')&&s.sec?`<div style="display:flex;align-items:center;gap:8px;padding:4px 10px 8px 34px;font-size:11px;color:var(--dim)"><span style="white-space:nowrap">세컨 비중</span>`+
+      `<input type="range" min="0" max="90" step="1" value="${s.secW!==undefined?s.secW:50}" id="secrng-${s.id}" oninput="setSecW('${s.id}',this.value,'range')" style="flex:1;min-width:70px">`+
+      `<input type="number" min="0" max="90" value="${s.secW!==undefined?s.secW:50}" id="secnum-${s.id}" onchange="setSecW('${s.id}',this.value,'num')" onfocus="this.select()" style="width:48px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 5px;border-radius:4px">%`+
+      `<span style="color:var(--faint);white-space:nowrap" id="seclbl-${s.id}">(메인 ${100-(s.secW!==undefined?s.secW:50)} / 세컨 ${s.secW!==undefined?s.secW:50})</span></div>`:''}`;
   });
   h+=`</div>`;
   // 추가 버튼
@@ -969,8 +1176,8 @@ function renderWeights(){
   if(sliderOn && on.length>=2){
     for(const s of on){
       h+=`<div class="wslider"><div class="nm"><span class="dot ${STRAT_TYPES[s.type].cls}"></span>${s.name}</div>`+
-         `<input type="range" min="0" max="100" step="1" value="${s.w}" oninput="setWslider('${s.id}',this.value)">`+
-         `<span class="wval" id="wval-${s.id}">${Math.round(s.w)}%</span></div>`;
+         `<input type="range" min="0" max="100" step="1" value="${s.w}" id="wrng-${s.id}" oninput="setWslider('${s.id}',this.value)">`+
+         `<span class="wval" style="display:inline-flex;align-items:center;gap:1px"><input id="wval-${s.id}" value="${Math.round(s.w)}" onchange="setWslider('${s.id}',this.value,true)" onfocus="this.select()" style="width:38px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:12px;padding:2px 4px;border-radius:4px">%</span></div>`;
     }
   } else {
     on.forEach(s=>{
@@ -1156,6 +1363,24 @@ function openSlotParams(id){
   m.innerHTML=h;
 }
 function closeSlotParams(){ const m=document.getElementById('slot-param-modal'); if(m) m.innerHTML=''; renderWeights(); run(); }
+// ===== 언더워터 기간 (연도별: 그 해 전고점 회복까지 최장 거래일) =====
+function yearUnderwater(results, active, wsum, year){
+  const base=results[active[0]].series;
+  const ymds=Object.keys(base).filter(ymd=>{ if(2000+parseInt(ymd.slice(0,2))!==year) return false;
+    return active.every(s=>results[s].series[ymd]!==undefined); }).sort();
+  if(!ymds.length) return {maxUw:0, curUw:0, recovered:true};
+  const vals=ymds.map(ymd=>{ let v=0; active.forEach(s=>{ const sl=slotById(s); v+=((sl?sl.w:0)/wsum)*results[s].series[ymd]; }); return v; });
+  // 전고점 대비 물속(under water) 기간: 신고점 갱신 시 0, 아니면 +1. 최장 구간
+  let peak=vals[0], uw=0, maxUw=0;
+  for(let i=0;i<vals.length;i++){
+    if(vals[i]>=peak){ peak=vals[i]; uw=0; }
+    else { uw++; if(uw>maxUw) maxUw=uw; }
+  }
+  // 연말 기준 아직 회복 못했는지
+  const recovered=(vals[vals.length-1]>=peak);
+  return {maxUw, curUw:uw, recovered};
+}
+
 // ===== 연도 클릭 → 그 해 일별 자산곡선 =====
 function showYearChart(year){
   if(!window._cmp) return;
@@ -1227,9 +1452,9 @@ function setSlotTwDfEqual(id,nN){ const sl=slotById(id); if(!sl) return;
   if(!sl.params) sl.params={}; delete sl.params['df_tw']; saveAll(); openSlotParams(id); renderWeights(); }
 function resetSlotParams(id){ const sl=slotById(id); if(sl){ sl.params={}; sl.presetId=null; saveAll(); openSlotParams(id); renderWeights(); } }
 function setW(id,v){ const sl=slotById(id); if(sl) sl.w=parseFloat(v)||0; updateSum(); run(); }
-function setWslider(id,v){
+function setWslider(id,v,fromInput){
   const on=activeSlots(); const sl=slotById(id); if(!sl) return;
-  const nv=parseFloat(v)||0; sl.w=nv;
+  let nv=parseFloat(v)||0; if(nv<0)nv=0; if(nv>100)nv=100; sl.w=nv;
   const others=on.filter(k=>k.id!==id);
   const remain=100-nv;
   if(others.length===1){ others[0].w=remain; }
@@ -1238,9 +1463,12 @@ function setWslider(id,v){
     if(osum<=0){ const eq=remain/others.length; others.forEach(k=>k.w=eq); }
     else { others.forEach(k=>k.w=remain*(k.w/osum)); }
   }
-  on.forEach(k=>{ const el=document.getElementById('wval-'+k.id); if(el) el.textContent=Math.round(k.w)+'%';
-    const rng=document.querySelector(`.wslider input[type=range][oninput*="'${k.id}'"]`); if(rng&&k.id!==id) rng.value=k.w; });
-  updateSum(); run();
+  on.forEach(k=>{ // 입력칸 값 갱신 (지금 타자 치는 칸은 건드리지 않음)
+    const inp=document.getElementById('wval-'+k.id);
+    if(inp && !(fromInput && k.id===id)) inp.value=Math.round(k.w);
+    const rng=document.getElementById('wrng-'+k.id); if(rng&&k.id!==id) rng.value=Math.round(k.w);
+  });
+  saveAll(); updateSum(); run();
 }
 function updateSum(){ let sum=0; activeSlots().forEach(s=>sum+=s.w);
   const el=document.getElementById("wsumv"); if(el){ el.textContent=sum.toFixed(0)+"%"; el.className=Math.abs(sum-100)<0.1?"":"bad"; } }
@@ -1462,10 +1690,14 @@ function render(results){
   let yb=""; years.forEach(y=>{ const r=port[y]; const c=r.mdd!==0?r.ret/Math.abs(r.mdd):0;
     const mx=(r.maxRet!==undefined?r.maxRet:r.ret);
     const mn=(r.minRet!==undefined?r.minRet:r.ret);
+    const uw=yearUnderwater(results, active, wsum, y);
+    const uwTxt=uw.maxUw+'일'+(uw.recovered?'':'*');
     yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%</td>`+
       `<td class="pos">+${mx.toFixed(1)}%</td>`+
       `<td class="${mn>=0?'pos':'neg'}">${mn>=0?'+':''}${mn.toFixed(1)}%</td>`+
-      `<td class="neg">${r.mdd.toFixed(1)}%</td><td>${c.toFixed(2)}</td></tr>`; });
+      `<td class="neg">${r.mdd.toFixed(1)}%</td>`+
+      `<td title="${uw.recovered?'연내 회복':'연말까지 미회복'}">${uwTxt}</td>`+
+      `<td>${c.toFixed(2)}</td></tr>`; });
   document.getElementById("yearbody").innerHTML=yb;
   // 전략별 요약
   let sb="";
@@ -1945,7 +2177,7 @@ function saveAll(){
   const params={};
   for(const k in DEFAULTS){ const el=document.getElementById(k); if(el) params[k]=el.value; }
   // 백테스트 비중/on, 3모드 티어비중, 수수료
-  const slots=SLOTS.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on,w:s.w,presetId:s.presetId||null,params:JSON.parse(JSON.stringify(s.params||{}))}));
+  const slots=SLOTS.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on,w:s.w,presetId:s.presetId||null,params:JSON.parse(JSON.stringify(s.params||{})),sec:s.sec||false,secW:s.secW}));
   const tw=JSON.parse(JSON.stringify(TW));
   const twdf=JSON.parse(JSON.stringify(TWDF||[]));
   const fee={on:(document.getElementById('fee-on')||{}).checked||false,
@@ -1979,7 +2211,7 @@ function loadAll(){
   if(d.curAcct) _curAcct=d.curAcct;
   // 백테스트 비중/on 복원
   if(d.slots && Array.isArray(d.slots) && d.slots.length){
-    SLOTS=d.slots.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on!==false,w:s.w||0,presetId:s.presetId||null,params:s.params||{}}));
+    SLOTS=d.slots.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on!==false,w:s.w||0,presetId:s.presetId||null,params:s.params||{},sec:s.sec||false,secW:s.secW}));
     let mx=0; SLOTS.forEach(s=>{ const n=parseInt(String(s.id).replace('s',''))||0; if(n>mx)mx=n; }); _slotSeq=mx;
   }
   // 3모드 티어비중 복원
