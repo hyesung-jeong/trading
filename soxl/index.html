@@ -277,7 +277,9 @@
             <div class="prow"><label>보유한계<span class="phint">일</span></label><div class="stepper"><input id="g_aggHold" value="7"><div class="steparrows"><button type="button" onclick="stepInput('g_aggHold',1)">▲</button><button type="button" onclick="stepInput('g_aggHold',-1)">▼</button></div></div></div>
             <div class="psub">공통</div>
             <div class="prow"><label>복리정산주기<span class="phint">일</span></label><div class="stepper"><input id="g_cycle" value="10"><div class="steparrows"><button type="button" onclick="stepInput('g_cycle',1)">▲</button><button type="button" onclick="stepInput('g_cycle',-1)">▼</button></div></div></div>
-            <div class="prow"><label>분할개수</label><div class="stepper"><input id="g_nPos" value="6"><div class="steparrows"><button type="button" onclick="stepInput('g_nPos',1)">▲</button><button type="button" onclick="stepInput('g_nPos',-1)">▼</button></div></div></div>
+            <div class="prow"><label>분할개수</label><div class="stepper"><input id="g_nPos" value="6" onchange="if(typeof renderTwdg==='function')renderTwdg()"><div class="steparrows"><button type="button" onclick="stepInput('g_nPos',1)">▲</button><button type="button" onclick="stepInput('g_nPos',-1)">▼</button></div></div></div>
+            <div style="margin-top:10px"><button type="button" id="twdg-btn" onclick="toggleTwdg()" style="width:100%;border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;font-size:12px;padding:6px;border-radius:6px">티어 비중 조절</button></div>
+            <div class="tw-inline" id="tw-dongpa" style="margin-top:8px"></div>
           </div>
 
           <div class="pgroup" id="p-dropf">
@@ -751,7 +753,9 @@ function btYearSecond(items,P,tlog,prevYearClose,wMainFrac,wSecFrac){
           if(availTier>0){ let maxBuyPrice; if(dayNum===1 && !prevYearClose) maxBuyPrice=price;
             else maxBuyPrice=prevClose*(1.0+(mode===0?P.safeBuy:P.aggBuy)/100.0);
             let curInv=0; for(const t in E.positions) curInv+=E.positions[t].inv;
-            const remBudget=E.investBase-curInv; const buyAmount=remBudget<E.posSize?remBudget:E.posSize;
+            const remBudget=E.investBase-curInv;
+            const tierBudget=(P.tierW&&P.tierW[availTier-1]!=null)?E.investBase*(P.tierW[availTier-1]/100):E.posSize;
+            const buyAmount=remBudget<tierBudget?remBudget:tierBudget;
             const shares=Math.floor(buyAmount/maxBuyPrice);
             if(shares>0){ const actualInv=shares*price; const buyCost=actualInv*(1+fee);
               if(E.cash>=buyCost && buyCost<=buyAmount){ E.positions[availTier]={bp:price,sh:shares,bd:dayNum,inv:actualInv,bm:mode}; E.cash-=buyCost; if(isSecond)E.everStarted=true; } } } } }
@@ -827,7 +831,9 @@ function backtestYear(items,P,tlog,prevYearClose){
             else maxBuyPrice=prevClose*(1.0+(mode===0?P.safeBuy:P.aggBuy)/100.0);
             let curInv=0; for(const t in positions) curInv+=positions[t].inv;
             const remBudget=investBase-curInv;
-            const buyAmount=remBudget<posSize?remBudget:posSize;
+            // 티어 비중(P.tierW)이 있으면 그 비중만큼, 없으면 균등(posSize)
+            const tierBudget=(P.tierW&&P.tierW[availTier-1]!=null)?investBase*(P.tierW[availTier-1]/100):posSize;
+            const buyAmount=remBudget<tierBudget?remBudget:tierBudget;
             const shares=Math.floor(buyAmount/maxBuyPrice);
             if(shares>0){ const actualInv=shares*price; const buyCost=actualInv*(1+fee);
               if(cash>=buyCost && buyCost<=buyAmount){
@@ -1480,8 +1486,25 @@ function ptab(p){ document.querySelectorAll(".ptabs button").forEach(b=>b.classL
 function dualP(){ return {nAtk:gi("d_nAtk"),atkBuy:gf("d_atkBuy"),atkBuyNeg:gf("d_atkBuyNeg"),sellA:gf("d_sellA"),holdA:gf("d_holdA"),
   nDef:gi("d_nDef"),defHold:gi("d_defHold"),defBuy1:gf("d_defBuy1"),defBuy2:gf("d_defBuy2"),defSell:gf("d_defSell"),maN:gi("d_maN"),
   atkW:gv("d_atkW"),defW:gv("d_defW"),initCap:30000,fee:getFeeRate()}; }
-function dongpaP(){ return {safeBuy:gf("g_safeBuy"),aggBuy:gf("g_aggBuy"),safeProfit:gf("g_safeProfit"),aggProfit:gf("g_aggProfit"),
-  safeHold:gi("g_safeHold"),aggHold:gi("g_aggHold"),cycle:gi("g_cycle"),nPos:gi("g_nPos"),initCap:30000,fee:getFeeRate()}; }
+let TWDG=[]; let TWDG_ON=false;  // 동파 티어 비중 (켜졌을 때만 적용, 아니면 균등)
+function dongpaP(){ const nN=gi("g_nPos");
+  let tierW=null;
+  if(TWDG_ON){ const w=twdgEnsure(nN); tierW=w.slice(0,nN); }
+  return {safeBuy:gf("g_safeBuy"),aggBuy:gf("g_aggBuy"),safeProfit:gf("g_safeProfit"),aggProfit:gf("g_aggProfit"),
+  safeHold:gi("g_safeHold"),aggHold:gi("g_aggHold"),cycle:gi("g_cycle"),nPos:nN,tierW:tierW,initCap:30000,fee:getFeeRate()}; }
+function twdgEnsure(nN){ if(!Array.isArray(TWDG))TWDG=[]; const eq=Math.round((100/nN)*10)/10;
+  if(TWDG.length<nN){ for(let i=TWDG.length;i<nN;i++) TWDG.push(eq); } if(TWDG.length>nN) TWDG=TWDG.slice(0,nN); return TWDG; }
+function toggleTwdg(){ TWDG_ON=!TWDG_ON; if(TWDG_ON) twdgEnsure(gi("g_nPos")); renderTwdg(); saveAll(); run(); }
+function setTwdg(i,v){ twdgEnsure(gi("g_nPos")); TWDG[i]=parseFloat(v)||0; renderTwdg(); run(); }
+function twdgEqual(){ TWDG=[]; twdgEnsure(gi("g_nPos")); renderTwdg(); run(); }
+function renderTwdg(){ const el=document.getElementById('tw-dongpa'); if(!el) return;
+  const btn=document.getElementById('twdg-btn'); if(btn){ btn.textContent=TWDG_ON?'티어 비중 조절 ✓':'티어 비중 조절'; btn.style.background=TWDG_ON?'var(--dongpa)':'var(--panel)'; btn.style.color=TWDG_ON?'#fff':'var(--dim)'; }
+  if(!TWDG_ON){ el.innerHTML=''; return; }
+  const nN=gi("g_nPos")||6; const w=twdgEnsure(nN);
+  let cells=''; for(let i=0;i<nN;i++) cells+=`<div class="tw-cell"><span>T${i+1}</span><input type="number" step="0.1" value="${w[i]}" onchange="setTwdg(${i},this.value)"></div>`;
+  const sum=w.reduce((a,b)=>a+(+b||0),0);
+  el.innerHTML=`<div class="twh">티어 비중 (%) <span onclick="twdgEqual()" style="color:var(--dongpa);cursor:pointer;margin-left:6px">균등으로</span></div><div class="tw-grid">${cells}</div><div class="tw-sum">합계 ${sum.toFixed(1)}% · 균등 기본 ${(100/nN).toFixed(1)}%</div>`;
+}
 
 // ===== 떨프 티어 비중 (% · 기본 균등 100÷분할수) =====
 let TWDF=[];
@@ -1518,6 +1541,16 @@ const TW_DEFAULT={
   AG:[6.0,7.0,8.0,29.0,25.0,25.0,9.0,20.0,10.0]
 };
 let TW={SF:[...TW_DEFAULT.SF], Middle:[...TW_DEFAULT.Middle], AG:[...TW_DEFAULT.AG]};
+// 3모드 티어별 매수율/매도율/보유일 (모드별 배열). 비어있으면 단일 입력칸값을 티어 공통 적용
+let TBUY={SF:[],Middle:[],AG:[]}, TSELL={SF:[],Middle:[],AG:[]}, THOLD={SF:[],Middle:[],AG:[]};
+// 단일칸 기본값으로 배열 채우기 (분할수에 맞춰)
+function tierArr(store,mode,nN,singleId,isInt){
+  let a=store[mode]||[];
+  const el=document.getElementById(singleId); const base=el?parseFloat(el.value):0;
+  if(a.length<nN){ for(let i=a.length;i<nN;i++) a.push(isNaN(base)?0:base); }
+  if(a.length>nN) a=a.slice(0,nN);
+  store[mode]=a; return a;
+}
 function threeP(){ const n=(id)=>gi(id);
   // 티어비중: 슬롯 입력값(t_twSF/MD/AG) 우선, 없으면 전역 TW, 그래도 없으면 균등. (% → 소수)
   const wOf=(mode,nN)=>{
@@ -1538,7 +1571,13 @@ function threeP(){ const n=(id)=>gi(id);
     if(!arr.length) return Array(nN).fill(0);
     const w=[]; for(let i=0;i<nN;i++) w.push(arr[i]!==undefined?arr[i]:arr[arr.length-1]);
     return pct?w.map(x=>x/100):w.map(x=>Math.round(x)); };
-  const S=(mode,nN,bId,sId,hId)=>({buy:listOf(gvs(bId),nN,true),sell:listOf(gvs(sId),nN,true),hold:listOf(gvs(hId),nN,false),
+  const arrOf=(store,mode,nN,fallbackId,pct)=>{
+    let a=store[mode]||[];
+    if(a.length>=nN){ const r=a.slice(0,nN); return pct?r.map(x=>x/100):r.map(x=>Math.round(x)); }
+    // 배열이 모자라면 단일칸 값으로 채움
+    return listOf(gvs(fallbackId),nN,pct);
+  };
+  const S=(mode,nN,bId,sId,hId)=>({buy:arrOf(TBUY,mode,nN,bId,true),sell:arrOf(TSELL,mode,nN,sId,true),hold:arrOf(THOLD,mode,nN,hId,false),
     weight:wOf(mode,nN),comp_rate:gf("t_comp")/100,loss_rate:gf("t_loss")/100});
   return {settings:{SF:S("SF",n("t_sfN"),"t_sfBuy","t_sfSell","t_sfHold"),
     Middle:S("Middle",n("t_mdN"),"t_mdBuy","t_mdSell","t_mdHold"),
@@ -1546,23 +1585,33 @@ function threeP(){ const n=(id)=>gi(id);
     rsiMin:gf("t_rsiMin"),rsiMax:gf("t_rsiMax"),initCap:30000,fee:getFeeRate()}; }
 // 각 모드 파라미터 아래에 티어 비중 칸(%)을 분할수에 맞춰 렌더
 function renderTw(){
-  const modes=[['SF','tw-sf','t_sfN'],['Middle','tw-md','t_mdN'],['AG','tw-ag','t_agN']];
-  modes.forEach(([mode,divId,nId])=>{
+  const modes=[['SF','tw-sf','t_sfN','t_sfBuy','t_sfSell','t_sfHold'],['Middle','tw-md','t_mdN','t_mdBuy','t_mdSell','t_mdHold'],['AG','tw-ag','t_agN','t_agBuy','t_agSell','t_agHold']];
+  modes.forEach(([mode,divId,nId,buyId,sellId,holdId])=>{
     const el=document.getElementById(divId); if(!el) return;
     const nN=gi(nId)||TW_DEFAULT[mode].length;
     let w=TW[mode]||[];
     if(w.length<nN){ const d=TW_DEFAULT[mode]; for(let i=w.length;i<nN;i++) w.push(d[i]!==undefined?d[i]:(100/nN)); }
     if(w.length>nN) w=w.slice(0,nN);
     TW[mode]=w;
+    const bA=tierArr(TBUY,mode,nN,buyId,false), sA=tierArr(TSELL,mode,nN,sellId,false), hA=tierArr(THOLD,mode,nN,holdId,true);
+    const grid=(label,arr,step,setter,intMode)=>{
+      let cells="";
+      for(let i=0;i<nN;i++) cells+=`<div class="tw-cell"><span>T${i+1}</span><input type="number" step="${step}" value="${arr[i]}" onchange="${setter}('${mode}',${i},this.value)"></div>`;
+      return `<div class="twh" style="margin-top:8px">${label}</div><div class="tw-grid">${cells}</div>`;
+    };
     let cells="";
-    for(let i=0;i<nN;i++){
-      cells+=`<div class="tw-cell"><span>T${i+1}</span><input type="number" step="0.1" value="${w[i]}" onchange="setTw('${mode}',${i},this.value)"></div>`;
-    }
+    for(let i=0;i<nN;i++) cells+=`<div class="tw-cell"><span>T${i+1}</span><input type="number" step="0.1" value="${w[i]}" onchange="setTw('${mode}',${i},this.value)"></div>`;
     const sum=w.reduce((a,b)=>a+(+b||0),0);
-    el.innerHTML=`<div class="twh">티어 비중 (%)</div><div class="tw-grid">${cells}</div><div class="tw-sum">합계 ${sum.toFixed(1)}% (정규화 안 함 — 각 티어가 시작자본 대비 이 %만큼 매수)</div>`;
+    el.innerHTML=grid('매수율 (%)',bA,'0.1','setTBuy')+
+      grid('매도율 (%)',sA,'0.1','setTSell')+
+      grid('보유일',hA,'1','setTHold')+
+      `<div class="twh" style="margin-top:8px">티어 비중 (%)</div><div class="tw-grid">${cells}</div><div class="tw-sum">비중 합계 ${sum.toFixed(1)}% (각 티어가 시작자본 대비 이 %만큼 매수)</div>`;
   });
 }
 function setTw(mode,i,v){ TW[mode][i]=parseFloat(v)||0; renderTw(); run(); }
+function setTBuy(mode,i,v){ TBUY[mode][i]=parseFloat(v)||0; run(); }
+function setTSell(mode,i,v){ TSELL[mode][i]=parseFloat(v)||0; run(); }
+function setTHold(mode,i,v){ THOLD[mode][i]=parseInt(v)||0; run(); }
 // 3모드 비중 렌더 시 떨프 비중도 같이 갱신
 (function(){ const _rt=renderTw; renderTw=function(){ _rt(); try{ renderTwDf(); }catch(e){} }; })();
 
@@ -2180,6 +2229,7 @@ function saveAll(){
   const slots=SLOTS.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on,w:s.w,presetId:s.presetId||null,params:JSON.parse(JSON.stringify(s.params||{})),sec:s.sec||false,secW:s.secW}));
   const tw=JSON.parse(JSON.stringify(TW));
   const twdf=JSON.parse(JSON.stringify(TWDF||[]));
+  const twdg=JSON.parse(JSON.stringify(TWDG||[])); const twdgOn=TWDG_ON;
   const fee={on:(document.getElementById('fee-on')||{}).checked||false,
              pct:(document.getElementById('fee-pct')||{}).value||'0.015'};
   // 초기 로딩 중의 자동저장은 '사용자 수정'이 아니므로 저장시각을 갱신하지 않음
@@ -2188,7 +2238,7 @@ function saveAll(){
   if(!_initDone){
     try{ const prev=JSON.parse(ls.getItem(LS_KEY)); savedAt=(prev&&prev.savedAt)?prev.savedAt:0; }catch(e){ savedAt=0; }
   }
-  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, fee, savedAt};
+  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, savedAt};
   try{ ls.setItem(LS_KEY, JSON.stringify(payload)); }catch(e){}
   wsStoreActive(payload); // 현재 설정 탭에도 자동저장
   if(_initDone) cloudSchedulePush(); // 클라우드 자동 업로드 (디바운스)
@@ -2217,6 +2267,7 @@ function loadAll(){
   // 3모드 티어비중 복원
   if(d.tw){ for(const m in d.tw){ if(TW[m]&&Array.isArray(d.tw[m])) TW[m]=d.tw[m].slice(); } }
   if(Array.isArray(d.twdf)) TWDF=d.twdf.slice();
+  if(Array.isArray(d.twdg)) TWDG=d.twdg.slice(); if(typeof d.twdgOn==='boolean') TWDG_ON=d.twdgOn;
   // 수수료 복원
   if(d.fee){ const fo=document.getElementById('fee-on'), fp=document.getElementById('fee-pct');
     if(fo) fo.checked=!!d.fee.on; if(fp&&d.fee.pct!=null) fp.value=d.fee.pct; }
@@ -2749,7 +2800,7 @@ const PARAM_GROUPS=[
     ['t_rsiMax','RSI Max','이상이면 천장(AG)'],
   ]},
   {name:'3모드 · 바닥(SF)', rows:[
-    ['t_sfN','분할수','티어 수'],['t_sfBuy','매수율','% · 티어별은 3/4/5'],['t_sfSell','매도율','% · 티어별은 3/4/5'],['t_sfHold','보유일','일 · 티어별은 20/25/30'],
+    ['t_sfN','분할수','티어 수'],['t_sfBuy','매수율(단일/폴백)','티어칸 비우면 이 값 공통'],['t_sfSell','매도율','% · 티어별은 3/4/5'],['t_sfHold','보유일','일 · 티어별은 20/25/30'],
     ['t_twSF','티어비중','T1/T2/… % (예: 10/15/20, 빈칸=기존값)'],
   ]},
   {name:'3모드 · 중간(Middle)', rows:[
@@ -2826,7 +2877,7 @@ function resetAcctParams(){
 }
 
 // 초기화: 저장된 설정 복원
-initDateRange(); loadAll(); renderWeights(); renderTw(); getFeeRate(); renderWsTabs();
+initDateRange(); loadAll(); renderWeights(); renderTw(); if(typeof renderTwdg==="function")renderTwdg(); getFeeRate(); renderWsTabs();
 // 클라우드 동기화 시작 (설정돼 있으면)
 if(cloudOn() && !cloudProfile()) askCloudProfile(); else cloudInit();
 // 탭으로 돌아왔을 때 클라우드에 더 최신 설정이 있으면 자동 반영
