@@ -1068,9 +1068,30 @@ function withSlotParams(slot, fn){
     if(typeof tw==='string') tw=tw.split(/[\/,\s]+/).map(x=>parseFloat(x)).filter(x=>!isNaN(x));
     TWDF=Array.isArray(tw)?tw.slice():[];
   }
+  // 3모드 슬롯별 티어 배열: 전역 TBUY/TSELL/THOLD/TW 잠깐 교체
+  let m3Bak=null;
+  if(slot.type==='three'){
+    m3Bak={TBUY:JSON.parse(JSON.stringify(TBUY)),TSELL:JSON.parse(JSON.stringify(TSELL)),THOLD:JSON.parse(JSON.stringify(THOLD)),TW:JSON.parse(JSON.stringify(TW))};
+    const map=[['SF','sfBuy','sfSell','sfHold','sfW'],['Middle','mdBuy','mdSell','mdHold','mdW'],['AG','agBuy','agSell','agHold','agW']];
+    map.forEach(([mode,bK,sK,hK,wK])=>{
+      if(Array.isArray(p['slot_'+bK])) TBUY[mode]=p['slot_'+bK].slice();
+      if(Array.isArray(p['slot_'+sK])) TSELL[mode]=p['slot_'+sK].slice();
+      if(Array.isArray(p['slot_'+hK])) THOLD[mode]=p['slot_'+hK].slice();
+      if(Array.isArray(p['slot_'+wK])) TW[mode]=p['slot_'+wK].slice();
+    });
+  }
+  // 동파 슬롯별 티어 비중: 전역 TWDG/TWDG_ON 잠깐 교체
+  let dgBak=null;
+  if(slot.type==='dongpa'){
+    dgBak={on:TWDG_ON, arr:Array.isArray(TWDG)?TWDG.slice():[]};
+    if(p['g_twOn'] && Array.isArray(p['g_tw'])){ TWDG_ON=true; TWDG=p['g_tw'].slice(); }
+    else { TWDG_ON=false; }
+  }
   let r; try{ r=fn(); } finally {
     for(const id in bak){ const el=document.getElementById(id); if(el) el.value=bak[id]; }
     if(twChanged) TWDF=twBak;
+    if(m3Bak){ TBUY=m3Bak.TBUY; TSELL=m3Bak.TSELL; THOLD=m3Bak.THOLD; TW=m3Bak.TW; }
+    if(dgBak){ TWDG_ON=dgBak.on; TWDG=dgBak.arr; }
   }
   return r;
 }
@@ -1361,6 +1382,43 @@ function openSlotParams(id){
     const sum=tw.reduce((a,b)=>a+(+b||0),0);
     h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:6px">합계 ${sum.toFixed(1)}% · 균등 기본 ${eq}% <span onclick="setSlotTwDfEqual('${id}',${nN})" style="color:var(--accent2);cursor:pointer;margin-left:6px">균등으로</span></div>`;
   }
+  // ── 3모드 전용: 각 모드(SF/MD/AG) 티어별 매수/매도/보유/비중 그리드 ──
+  if(sl.type==='three'){
+    const gv=(pid)=>{ const gEl=document.getElementById(pid); return (ap[pid]!==undefined)?ap[pid]:(gEl?gEl.value:''); };
+    const modes=[['SF','바닥','t_sfN','sfBuy','sfSell','sfHold','sfW'],['Middle','중간','t_mdN','mdBuy','mdSell','mdHold','mdW'],['AG','천장','t_agN','agBuy','agSell','agHold','agW']];
+    modes.forEach(([mode,kor,nId,bK,sK,hK,wK])=>{
+      const nN=parseInt(gv(nId))||6;
+      const getArr=(key,single,isInt)=>{ let a=ap['slot_'+key];
+        if(Array.isArray(a))a=a.slice(); else a=null;
+        const base=parseFloat(single); if(!a){ a=Array(nN).fill(isNaN(base)?0:base); }
+        while(a.length<nN)a.push(isNaN(base)?0:base); if(a.length>nN)a=a.slice(0,nN); return a; };
+      const bA=getArr(bK,gv(mode==='SF'?'t_sfBuy':mode==='Middle'?'t_mdBuy':'t_agBuy')),
+            sA=getArr(sK,gv(mode==='SF'?'t_sfSell':mode==='Middle'?'t_mdSell':'t_agSell')),
+            hA=getArr(hK,gv(mode==='SF'?'t_sfHold':mode==='Middle'?'t_mdHold':'t_agHold'),true),
+            wA=getArr(wK,String(100/nN));
+      h+=`<div style="font-weight:600;font-size:13px;margin:14px 0 4px;color:var(--accent2)">3모드 · ${kor}(${mode}) 티어별</div>`;
+      const grid=(lbl,arr,step,key)=>{
+        let c=`<div style="font-size:11px;color:var(--faint);margin:6px 0 3px">${lbl}</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">`;
+        for(let i=0;i<nN;i++) c+=`<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:9px;color:var(--faint)">T${i+1}</span><input type="number" step="${step}" value="${arr[i]}" onchange="setSlot3('${id}','${key}',${i},this.value,${nN})" style="width:52px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:12px;padding:4px;border-radius:4px"></div>`;
+        return c+`</div>`;
+      };
+      h+=grid('매수율 %',bA,'0.1',bK)+grid('매도율 %',sA,'0.1',sK)+grid('보유일',hA,'1',hK)+grid('티어비중 %',wA,'0.1',wK);
+    });
+  }
+  // ── 동파 전용: 티어 비중 조절 (버튼 토글) ──
+  if(sl.type==='dongpa'){
+    const nN=parseInt((ap['g_nPos']!==undefined?ap['g_nPos']:(document.getElementById('g_nPos')||{}).value))||6;
+    const on=!!ap['g_twOn'];
+    h+=`<div style="font-weight:600;font-size:13px;margin:14px 0 4px">동파 · 티어 비중</div>`;
+    h+=`<button onclick="toggleSlotTwdg('${id}',${nN})" style="width:100%;border:1px solid ${on?'var(--dongpa)':'var(--line)'};background:${on?'var(--dongpa)':'var(--panel)'};color:${on?'#fff':'var(--dim)'};cursor:pointer;font-size:12px;padding:6px;border-radius:6px;margin-bottom:6px">티어 비중 조절${on?' ✓':''}</button>`;
+    if(on){ let tw=ap['g_tw']; const eq=Math.round((100/nN)*10)/10;
+      if(Array.isArray(tw))tw=tw.slice(); else tw=null; if(!tw||!tw.length)tw=Array(nN).fill(eq);
+      while(tw.length<nN)tw.push(eq); if(tw.length>nN)tw=tw.slice(0,nN);
+      h+=`<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">`;
+      for(let i=0;i<nN;i++) h+=`<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:9px;color:var(--faint)">T${i+1}</span><input type="number" step="0.1" value="${tw[i]}" onchange="setSlotTwdg('${id}',${i},this.value,${nN})" style="width:52px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:12px;padding:4px;border-radius:4px"></div>`;
+      h+=`</div><div style="font-size:11px;color:var(--dim);margin-bottom:6px">합계 ${tw.reduce((a,b)=>a+(+b||0),0).toFixed(1)}% · 균등 ${eq}%</div>`;
+    }
+  }
   h+=`<div style="margin-top:16px;display:flex;gap:8px"><button onclick="resetSlotParams('${id}')" style="background:var(--panel2);border:1px solid var(--line);color:var(--dim);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px">기본값으로</button>`;
   h+=`<button onclick="closeSlotParams()" style="background:var(--accent2);border:none;color:#fff;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">완료</button></div>`;
   h+=`</div></div>`;
@@ -1456,6 +1514,21 @@ function setSlotTwDf(id,i,val,nN){ const sl=slotById(id); if(!sl) return;
   tw[i]=parseFloat(val)||0; sl.params['df_tw']=tw; saveAll(); openSlotParams(id); renderWeights(); }
 function setSlotTwDfEqual(id,nN){ const sl=slotById(id); if(!sl) return;
   if(!sl.params) sl.params={}; delete sl.params['df_tw']; saveAll(); openSlotParams(id); renderWeights(); }
+// 3모드 슬롯 티어별 (key=sfBuy/sfSell/sfHold/sfW/mdBuy/...)
+function setSlot3(id,key,i,val,nN){ const sl=slotById(id); if(!sl)return; if(!sl.params)sl.params={};
+  const pk='slot_'+key; let a=sl.params[pk]; if(Array.isArray(a))a=a.slice(); else a=Array(nN).fill(0);
+  while(a.length<nN)a.push(0); if(a.length>nN)a=a.slice(0,nN);
+  a[i]=parseFloat(val)||0; sl.params[pk]=a; saveAll(); openSlotParams(id); renderWeights(); }
+// 동파 슬롯 티어 비중
+function toggleSlotTwdg(id,nN){ const sl=slotById(id); if(!sl)return; if(!sl.params)sl.params={};
+  sl.params['g_twOn']=!sl.params['g_twOn'];
+  if(sl.params['g_twOn'] && !Array.isArray(sl.params['g_tw'])){ const eq=Math.round((100/nN)*10)/10; sl.params['g_tw']=Array(nN).fill(eq); }
+  saveAll(); openSlotParams(id); renderWeights(); }
+function setSlotTwdg(id,i,val,nN){ const sl=slotById(id); if(!sl)return; if(!sl.params)sl.params={};
+  let a=sl.params['g_tw']; const eq=Math.round((100/nN)*10)/10;
+  if(Array.isArray(a))a=a.slice(); else a=Array(nN).fill(eq);
+  while(a.length<nN)a.push(eq); if(a.length>nN)a=a.slice(0,nN);
+  a[i]=parseFloat(val)||0; sl.params['g_tw']=a; saveAll(); openSlotParams(id); renderWeights(); }
 function resetSlotParams(id){ const sl=slotById(id); if(sl){ sl.params={}; sl.presetId=null; saveAll(); openSlotParams(id); renderWeights(); } }
 function setW(id,v){ const sl=slotById(id); if(sl) sl.w=parseFloat(v)||0; updateSum(); run(); }
 function setWslider(id,v,fromInput){
