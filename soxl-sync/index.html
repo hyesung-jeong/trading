@@ -190,7 +190,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v12</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v13</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1268,14 +1268,14 @@ function renderWeights(){
   h+=`<div style="margin-bottom:10px">`;
   SLOTS.forEach(s=>{
     const cls=STRAT_TYPES[s.type].cls;
-    h+=`<div class="slot-item ${s.on?'on':'off'}" style="display:flex;align-items:center;gap:5px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:5px;background:${s.on?'var(--panel)':'var(--panel2)'}">
+    h+=`<div class="slot-item ${s.on?'on':'off'}" style="display:flex;align-items:center;gap:4px;padding:6px 6px;border:1px solid var(--line);border-radius:6px;margin-bottom:5px;background:${s.on?'var(--panel)':'var(--panel2)'}">
       <input type="checkbox" ${s.on?'checked':''} onchange="toggleStrat('${s.id}')" style="cursor:pointer">
       <span class="dot ${cls}"></span>
-      <input value="${s.name}" onchange="renameSlot('${s.id}',this.value)" style="flex:1;min-width:40px;width:40px;border:none;background:transparent;color:var(--ink);font-weight:600;font-size:13px;padding:2px 2px">
-      ${(function(){ let pl=slotPresetLabel(s); if(pl) pl=pl.replace("(세컨동시)",""); return pl?`<span onclick="openSlotParams('${s.id}')" title="적용된 프리셋 (* = 값 수정됨)" style="font-size:11px;padding:2px 7px;border-radius:9px;background:#eef4ff;color:#3b6fd4;border:1px solid #c9daf5;cursor:pointer;white-space:nowrap;flex-shrink:0">${pl}</span>`:''; })()}
+      <input value="${s.name}" onchange="renameSlot('${s.id}',this.value)" style="flex:1;min-width:28px;width:28px;border:none;background:transparent;color:var(--ink);font-weight:600;font-size:13px;padding:2px 1px">
+      ${(function(){ let pl=slotPresetLabel(s); if(pl) pl=pl.replace("(세컨동시)",""); return pl?`<span onclick="openSlotParams('${s.id}')" title="적용된 프리셋 (* = 값 수정됨)" style="font-size:10px;padding:2px 5px;border-radius:9px;background:#eef4ff;color:#3b6fd4;border:1px solid #c9daf5;cursor:pointer;white-space:nowrap;flex-shrink:0">${pl}</span>`:''; })()}
       ${(s.type==='dongpa'||s.type==='dual')?`<button onclick="toggleSecond('${s.id}')" title="세컨: 메인이 풀티어된 다음날부터 추가 진입" style="border:1px solid ${s.sec?'var(--accent2)':'var(--line)'};background:${s.sec?'var(--accent2)':'var(--panel)'};color:${s.sec?'#fff':'var(--dim)'};cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">세컨${s.sec?' ✓':''}</button>`:''}
       ${s.type!=='cash'?`<button onclick="openSlotParams('${s.id}')" style="border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">파라미터</button>`:''}
-      <button onclick="removeSlot('${s.id}')" style="border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;padding:0 4px" title="삭제">×</button>
+      <button onclick="removeSlot('${s.id}')" style="border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;padding:0 2px;flex-shrink:0" title="삭제">×</button>
     </div>${(s.type==='dongpa'||s.type==='dual')&&s.sec?`<div style="display:flex;align-items:center;gap:8px;padding:4px 10px 8px 34px;font-size:11px;color:var(--dim)"><span style="white-space:nowrap">세컨 비중</span>`+
       `<input type="range" min="0" max="90" step="1" value="${s.secW!==undefined?s.secW:50}" id="secrng-${s.id}" oninput="setSecW('${s.id}',this.value,'range')" style="flex:1;min-width:70px">`+
       `<input type="number" min="0" max="90" value="${s.secW!==undefined?s.secW:50}" id="secnum-${s.id}" onchange="setSecW('${s.id}',this.value,'num')" onfocus="this.select()" style="width:48px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 5px;border-radius:4px">%`+
