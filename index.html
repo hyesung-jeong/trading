@@ -1,22 +1,63 @@
-<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>트레이딩 도구</title>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>혜성 트레이딩 도구</title>
 <style>
-body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f7f8fa;margin:0;padding:40px 16px;color:#191c22}
-.wrap{max-width:480px;margin:0 auto}
-h1{font-size:20px;font-weight:800;margin-bottom:4px}
-p.sub{color:#6b7280;font-size:13px;margin:0 0 24px}
-a.card{display:block;background:#fff;border:1px solid #e6e8ec;border-radius:14px;padding:18px 20px;margin-bottom:12px;text-decoration:none;color:inherit;transition:.15s}
-a.card:hover{border-color:#0f766e;box-shadow:0 2px 12px rgba(15,118,110,.08)}
-.t{font-size:16px;font-weight:700;margin-bottom:3px}
-.d{font-size:12px;color:#6b7280}
-.ic{font-size:20px;margin-right:8px}
-</style></head><body>
+  :root{--bg:#0b0e14;--panel:#161b26;--panel2:#1e2532;--line:#2a3242;--ink:#e6eaf2;--dim:#9aa5b8;--faint:#5f6b80;--accent:#0f766e;--accent2:#6366f1;--soxl:#f59e0b;--tqqq:#3b82f6;--combo:#ec4899;--invest:#10b981;--sync:#8b5cf6}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;padding:24px 16px 60px;min-height:100vh}
+  .wrap{max-width:640px;margin:0 auto}
+  header{text-align:center;margin:20px 0 32px}
+  header h1{font-size:24px;font-weight:800;letter-spacing:-0.5px}
+  header p{color:var(--dim);font-size:13px;margin-top:8px}
+  .cards{display:flex;flex-direction:column;gap:14px}
+  .card{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;text-decoration:none;color:var(--ink);transition:transform .1s,border-color .1s}
+  .card:active{transform:scale(.98)}
+  .card:hover{border-color:var(--accent2)}
+  .icon{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+  .card .body{flex:1;min-width:0}
+  .card .t{font-size:16px;font-weight:700;margin-bottom:3px}
+  .card .d{font-size:12px;color:var(--dim);line-height:1.4}
+  .card .arrow{color:var(--faint);font-size:20px}
+  .foot{text-align:center;color:var(--faint);font-size:11px;margin-top:32px;line-height:1.6}
+</style>
+</head>
+<body>
 <div class="wrap">
-<h1>🎯 트레이딩 도구</h1>
-<p class="sub">SOXL / TQQQ / QQQ 백테스트 · 매매 관리</p>
-<a class="card" href="./soxl/"><div class="t"><span class="ic">🔵</span>SOXL 백테스트</div><div class="d">멀티슬롯 · 동파/듀얼/3모드/떨프</div></a>
-<a class="card" href="./tqqq/"><div class="t"><span class="ic">🔴</span>TQQQ 백테스트</div><div class="d">멀티슬롯 · 떨사 포함</div></a>
-<a class="card" href="./combo/"><div class="t"><span class="ic">📉</span>폭락적립 · 변동성</div><div class="d">SOXL/TQQQ/QQQ · A/B/둘다 매수</div></a>
-<a class="card" href="./invest/"><div class="t"><span class="ic">💰</span>투자현황</div><div class="d">계좌 · 주간기록 · 수익률</div></a>
-</div></body></html>
+  <header>
+    <h1>🚀 혜성 트레이딩 도구</h1>
+    <p>SOXL / TQQQ 레버리지 ETF 백테스트 · 시뮬레이터</p>
+  </header>
+  <div class="cards">
+    <a class="card" href="soxl/">
+      <div class="icon" style="background:rgba(245,158,11,.15);color:var(--soxl)">🔵</div>
+      <div class="body"><div class="t">SOXL 백테스트</div><div class="d">멀티슬롯 · 듀얼/동파/3모드/떨프 · 계좌·프리셋</div></div>
+      <div class="arrow">›</div>
+    </a>
+    <a class="card" href="soxl-sync/">
+      <div class="icon" style="background:rgba(139,92,246,.15);color:var(--sync)">🔗</div>
+      <div class="body"><div class="t">SOXL 백테스트 (세컨동시)</div><div class="d">동파·듀얼 결합 세컨 · 둘 다 풀티어 후 발동</div></div>
+      <div class="arrow">›</div>
+    </a>
+    <a class="card" href="tqqq/">
+      <div class="icon" style="background:rgba(59,130,246,.15);color:var(--tqqq)">🟦</div>
+      <div class="body"><div class="t">TQQQ 백테스트</div><div class="d">TQQQ 전략 백테스트 · 동파/3모드</div></div>
+      <div class="arrow">›</div>
+    </a>
+    <a class="card" href="combo/">
+      <div class="icon" style="background:rgba(236,72,153,.15);color:var(--combo)">📉</div>
+      <div class="body"><div class="t">폭락적립 · 변동성</div><div class="d">SOXL/TQQQ/QQQ 폭락 적립 시뮬 · 표준편차</div></div>
+      <div class="arrow">›</div>
+    </a>
+    <a class="card" href="invest/">
+      <div class="icon" style="background:rgba(16,185,129,.15);color:var(--invest)">💰</div>
+      <div class="body"><div class="t">투자현황</div><div class="d">계좌별 투자 현황 · 자동 시세 · 클라우드 동기화</div></div>
+      <div class="arrow">›</div>
+    </a>
+  </div>
+  <div class="foot">개인용 트레이딩 도구 · 투자 판단의 근거가 아닌 참고용<br>데이터: 분할조정 종가 기준 백테스트</div>
+</div>
+</body>
+</html>
