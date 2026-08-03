@@ -55,7 +55,7 @@ canvas{width:100%;display:block}
 </head>
 <body>
 <div class="wrap">
-  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:var(--mut)">SOXL/TQQQ/QQQ · v8</span></h1>
+  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:var(--mut)">SOXL/TQQQ/QQQ · v9</span></h1>
   <div class="sub" id="datarange">–</div>
   <div class="sub" id="sync-status" style="cursor:pointer"></div>
 
@@ -75,42 +75,17 @@ canvas{width:100%;display:block}
 
   <!-- ===== 폭락 적립 뷰 ===== -->
   <div id="view-drop">
-    <div class="seg" style="margin-bottom:10px">
-      <span class="on" data-m="A" onclick="setMode('A')">장중 도달</span>
-      <span data-m="B" onclick="setMode('B')">종가 기준</span>
-      <span data-m="AB" onclick="setMode('AB')">둘 다(2회)</span>
-    </div>
     <div class="card">
-      <div class="label" id="mode-desc">조건</div>
-      <div class="grid4">
-        <div class="field" id="fld-th"><label>하락 기준 (%)</label>
-          <div class="stepper">
-            <input id="p_th" inputmode="decimal" value="-10" onfocus="this.select()">
-            <div class="steparrows">
-              <button type="button" onclick="stepThX('th',0.5)">▲</button>
-              <button type="button" onclick="stepThX('th',-0.5)">▼</button>
-            </div>
-          </div>
-        </div>
-        <div class="field hidden" id="fld-thA"><label>A 하락% (장중)</label>
-          <div class="stepper">
-            <input id="p_thA" inputmode="decimal" value="-10" onfocus="this.select()">
-            <div class="steparrows">
-              <button type="button" onclick="stepThX('thA',0.5)">▲</button>
-              <button type="button" onclick="stepThX('thA',-0.5)">▼</button>
-            </div>
-          </div>
-        </div>
-        <div class="field hidden" id="fld-thB"><label>B 하락% (종가)</label>
-          <div class="stepper">
-            <input id="p_thB" inputmode="decimal" value="-10" onfocus="this.select()">
-            <div class="steparrows">
-              <button type="button" onclick="stepThX('thB',0.5)">▲</button>
-              <button type="button" onclick="stepThX('thB',-0.5)">▼</button>
-            </div>
-          </div>
-        </div>
-        <div class="field"><label>회당 매수금 ($)</label><input id="p_amt" inputmode="numeric" value="1000" onfocus="this.select()"></div>
+      <div class="label" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📋 적립 규칙 (여러 개 동시 실행)</span>
+      </div>
+      <div class="sub" style="margin:0 0 8px">각 규칙이 독립적으로 발동해서 합산됩니다. 종가/저가 기준으로 하락%·매수금을 다르게 여러 개 추가하세요.</div>
+      <div id="rulelist"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button type="button" onclick="addRule('C')" style="font-size:12px;padding:6px 12px;border:1px solid var(--accent,#0f766e);background:var(--accent,#0f766e);color:#fff;border-radius:6px;cursor:pointer;font-weight:600">+ 종가 규칙</button>
+        <button type="button" onclick="addRule('L')" style="font-size:12px;padding:6px 12px;border:1px solid #b45309;background:#b45309;color:#fff;border-radius:6px;cursor:pointer;font-weight:600">+ 저가 규칙</button>
+      </div>
+      <div class="grid4" style="margin-top:12px">
         <div class="field"><label>시작 연도</label><select id="p_y0"></select></div>
         <div class="field"><label>종료 연도</label><select id="p_y1"></select></div>
       </div>
@@ -297,7 +272,14 @@ if(!ST.cfg) ST.cfg={ SOXL:{th:-10,thA:-10,thB:-10,amt:1000,y0:2018,y1:2026,mode:
 ['SOXL','TQQQ','QQQ'].forEach(t=>{ if(!ST.cfg[t]) ST.cfg[t]={th:-10,thA:-10,thB:-10,amt:1000,y0:(t==='QQQ'?2011:2018),y1:2026,mode:'A'};
   if(!ST.cfg[t].mode)ST.cfg[t].mode='A';
   if(ST.cfg[t].thA===undefined)ST.cfg[t].thA=ST.cfg[t].th||-10;
-  if(ST.cfg[t].thB===undefined)ST.cfg[t].thB=ST.cfg[t].th||-10; });
+  if(ST.cfg[t].thB===undefined)ST.cfg[t].thB=ST.cfg[t].th||-10;
+  // 규칙 배열(rules) 마이그레이션: base C=종가, L=저가(장중 지정가)
+  if(!ST.cfg[t].rules){ const c=ST.cfg[t]; const rr=[];
+    if(c.mode==='A'){ rr.push({base:'L',th:c.thA!==undefined?c.thA:c.th,amt:c.amt}); }
+    else if(c.mode==='B'){ rr.push({base:'C',th:c.thB!==undefined?c.thB:c.th,amt:c.amt}); }
+    else { rr.push({base:'L',th:c.thA!==undefined?c.thA:c.th,amt:c.amt}); rr.push({base:'C',th:c.thB!==undefined?c.thB:c.th,amt:c.amt}); }
+    ST.cfg[t].rules=rr;
+  } });
 function C(){ return ST.cfg[ST.ticker]; }  // 현재 종목 설정
 if(!ST.volBase) ST.volBase='C';  // 변동성 기준: C=종가, L=저가
 
@@ -331,24 +313,22 @@ function calcDrop(){
   const rows=getRows(ST.ticker).filter(r=>r.y>=cf.y0&&r.y<=cf.y1);
   let sh=0,inv=0,peak=0,mdd=0,worstRoi=999,worstDate=null; const buys=[],series=[],yearly={};
   rows.forEach(r=>{
-    // 매수 이벤트 수집 (AB는 최대 2건)
+    // 매수 이벤트 수집 (여러 규칙 동시 — 각 규칙이 독립 발동)
     const events=[];
-    const doA=(cf.mode==='A'||cf.mode==='AB');
-    const doB=(cf.mode==='B'||cf.mode==='AB');
-    const thA=(cf.mode==='AB')?(cf.thA!==undefined?cf.thA:cf.th):cf.th;
-    const thB=(cf.mode==='AB')?(cf.thB!==undefined?cf.thB:cf.th):cf.th;
-    if(doA){
-      // 장중: 전일종가 기준 지정가(thA%)에 저가가 도달하면 그 지정가에 체결
-      const limit=r.pc*(1+thA/100);
-      if(r.lo<=limit){ events.push({px:limit, chg:thA, kind:'A'}); }
-    }
-    if(doB){
-      // 종가 기준(thB%)
-      if(r.chg<=thB){ events.push({px:r.c, chg:r.chg, kind:'B'}); }
-    }
+    (cf.rules||[]).forEach((rule,ri)=>{
+      const amt=rule.amt!==undefined?rule.amt:cf.amt;
+      if(rule.base==='L'){
+        // 저가(장중): 전일종가 기준 지정가(th%)에 저가가 도달하면 그 지정가에 체결
+        const limit=r.pc*(1+rule.th/100);
+        if(r.lo<=limit){ events.push({px:limit, chg:rule.th, kind:'L'+ri, amt}); }
+      } else {
+        // 종가 기준(th%)
+        if(r.chg<=rule.th){ events.push({px:r.c, chg:r.chg, kind:'C'+ri, amt}); }
+      }
+    });
     events.forEach(ev=>{
-      sh+=cf.amt/ev.px; inv+=cf.amt;
-      buys.push({d:r.d,c:ev.px,chg:ev.chg,q:cf.amt/ev.px,cum:sh,kind:ev.kind});
+      sh+=ev.amt/ev.px; inv+=ev.amt;
+      buys.push({d:r.d,c:ev.px,chg:ev.chg,q:ev.amt/ev.px,cum:sh,kind:ev.kind});
       (yearly[r.y]=yearly[r.y]||{cnt:0}).cnt++;
     });
     if(inv>0){ const val=sh*r.c, ratio=val/inv; if(ratio>peak)peak=ratio; const dd=(ratio-peak)/peak*100; if(dd<mdd)mdd=dd;
@@ -364,12 +344,12 @@ function calcDrop(){
     const yr=byYear[y]; let ish=0,iinv=0,ipeak=0,imdd=0,iworst=999;
     yr.forEach(r=>{
       const events=[];
-      const doA=(cf.mode==='A'||cf.mode==='AB'), doB=(cf.mode==='B'||cf.mode==='AB');
-      const thA=(cf.mode==='AB')?(cf.thA!==undefined?cf.thA:cf.th):cf.th;
-      const thB=(cf.mode==='AB')?(cf.thB!==undefined?cf.thB:cf.th):cf.th;
-      if(doA){ const limit=r.pc*(1+thA/100); if(r.lo<=limit) events.push({px:limit}); }
-      if(doB){ if(r.chg<=thB) events.push({px:r.c}); }
-      events.forEach(ev=>{ ish+=cf.amt/ev.px; iinv+=cf.amt; });
+      (cf.rules||[]).forEach(rule=>{
+        const amt=rule.amt!==undefined?rule.amt:cf.amt;
+        if(rule.base==='L'){ const limit=r.pc*(1+rule.th/100); if(r.lo<=limit) events.push({px:limit,amt}); }
+        else { if(r.chg<=rule.th) events.push({px:r.c,amt}); }
+      });
+      events.forEach(ev=>{ ish+=ev.amt/ev.px; iinv+=ev.amt; });
       if(iinv>0){ const val=ish*r.c, ratio=val/iinv; if(ratio>ipeak)ipeak=ratio;
         const dd=(ratio-ipeak)/ipeak*100; if(dd<imdd)imdd=dd;
         const roi=(val/iinv-1)*100; if(roi<iworst)iworst=roi; }
@@ -484,7 +464,7 @@ function renderDrop(){
   // 합계 행 (전체 매수한 날/전체 거래일)
   if(totCnt>0){ const tpct=totDays>0?(totBuyDays/totDays*100):0;
     yb.innerHTML+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td>합계</td><td>${totCnt}회</td><td style="color:var(--sub)">${tpct.toFixed(0)}%</td><td colspan="4"></td></tr>`; }
-  const showKind=(C().mode==='AB');
+  const showKind=((C().rules||[]).length>1);
   $('buybody').innerHTML=R.buys.map(b=>`<tr><td>${dstr(b.d)}${showKind&&b.kind?' <span style="color:var(--mut);font-size:10px">'+b.kind+'</span>':''}</td><td>$${b.c.toFixed(2)}</td><td class="neg">${b.chg.toFixed(1)}%</td><td>${b.q.toFixed(1)}</td><td>${b.cum.toFixed(0)}</td></tr>`).join('');
   drawLine(R.series);
   // 스캔이 펼쳐져 있으면 기간·조건 변경 반영해 다시 계산
@@ -512,7 +492,7 @@ function scanBuy(keepOpen){
   if(!keepOpen){ wrap.classList.toggle('hidden'); }
   if(wrap.classList.contains('hidden')) return;
   const cf=C();
-  const sp=$('scanperiod'); if(sp) sp.textContent=`(${cf.y0}~${cf.y1} · ${cf.mode==='A'?'장중':cf.mode==='B'?'종가':'둘다'})`;
+  const sp=$('scanperiod'); if(sp) sp.textContent=`(${cf.y0}~${cf.y1} · 규칙 ${(cf.rules||[]).length}개)`;
   // 하락% 후보: -3 ~ -20 (0.5단위는 너무 많으니 1단위)
   const cands=[];
   for(let p=-3;p>=-20;p--) cands.push(p);
@@ -693,8 +673,7 @@ function refreshYears(){
   if(cf.y0<years[0]||cf.y0>years[years.length-1]) cf.y0=years[0];
   if(cf.y1<years[0]||cf.y1>years[years.length-1]) cf.y1=years[years.length-1];
   $('p_y0').value=cf.y0; $('p_y1').value=cf.y1;
-  $('p_th').value=cf.th; $('p_thA').value=(cf.thA!==undefined?cf.thA:cf.th); $('p_thB').value=(cf.thB!==undefined?cf.thB:cf.th); $('p_amt').value=cf.amt;
-  syncModeUI();
+  renderRules();
 }
 function renderAll(){
   const rows=getRows(ST.ticker);
@@ -705,43 +684,47 @@ function renderAll(){
 }
 
 // 입력 바인딩
-function bindTh(field,inputId){
-  $(inputId).addEventListener('input',()=>{ const v=parseFloat($(inputId).value); if(!isNaN(v)&&v<0){ C()[field]=v; save(true); renderDrop(); } });
-}
-bindTh('th','p_th'); bindTh('thA','p_thA'); bindTh('thB','p_thB');
-$('p_amt').addEventListener('input',()=>{ const v=parseFloat($('p_amt').value); if(!isNaN(v)&&v>0){ C().amt=v; save(true); renderDrop(); } });
 $('p_y0').addEventListener('change',()=>{ C().y0=parseInt($('p_y0').value); if(C().y0>C().y1){C().y1=C().y0;$('p_y1').value=C().y1;} save(true); renderDrop(); });
 $('p_y1').addEventListener('change',()=>{ C().y1=parseInt($('p_y1').value); if(C().y1<C().y0){C().y0=C().y1;$('p_y0').value=C().y0;} save(true); renderDrop(); });
-function stepThX(field,delta){
-  const inputId=field==='th'?'p_th':(field==='thA'?'p_thA':'p_thB');
-  let v=parseFloat($(inputId).value); if(isNaN(v)) v=0;
-  v=Math.round((v+delta)*2)/2;
-  if(v>-0.5) v=-0.5;
-  $(inputId).value=v; C()[field]=v; save(true); renderDrop();
+// ===== 규칙(rules) 관리 =====
+function addRule(base){
+  const cf=C(); if(!cf.rules)cf.rules=[];
+  cf.rules.push({base:base, th:-10, amt:1000});
+  save(true); renderRules(); renderDrop();
 }
-function setMode(m){ C().mode=m; save(true); document.querySelectorAll('#view-drop .seg span').forEach(x=>x.classList.toggle('on',x.dataset.m===m)); syncModeUI(); renderDrop(); }
+function removeRule(i){
+  const cf=C(); if(!cf.rules)return;
+  cf.rules.splice(i,1); save(true); renderRules(); renderDrop();
+}
+function setRuleTh(i,v){ const cf=C(); const x=parseFloat(v); if(!isNaN(x)&&x<0){ cf.rules[i].th=x; save(true); renderDrop(); } }
+function stepRuleTh(i,delta){ const cf=C(); let v=parseFloat(cf.rules[i].th); if(isNaN(v))v=0; v=Math.round((v+delta)*2)/2; if(v>-0.5)v=-0.5; cf.rules[i].th=v; save(true); renderRules(); renderDrop(); }
+function setRuleAmt(i,v){ const cf=C(); const x=parseFloat(v); if(!isNaN(x)&&x>0){ cf.rules[i].amt=x; save(true); renderDrop(); } }
+function renderRules(){
+  const cf=C(); const box=$('rulelist'); if(!box)return;
+  if(!cf.rules||!cf.rules.length){ box.innerHTML='<div class="sub" style="padding:10px;text-align:center;color:var(--mut)">규칙이 없습니다. 아래 버튼으로 추가하세요.</div>'; return; }
+  let h='';
+  cf.rules.forEach((rule,i)=>{
+    const isL=rule.base==='L';
+    const badge=isL?'<span style="font-size:11px;font-weight:700;color:#b45309;background:#fef3e2;border:1px solid #f5d5a8;padding:2px 8px;border-radius:9px">저가(장중)</span>'
+                   :'<span style="font-size:11px;font-weight:700;color:#0f766e;background:#e6f5f3;border:1px solid #a8dfd8;padding:2px 8px;border-radius:9px">종가</span>';
+    h+=`<div style="border:1px solid var(--line,#ddd);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--panel2,#fafafa)">`+
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">${badge}`+
+      `<button type="button" onclick="removeRule(${i})" style="border:none;background:transparent;color:#c0392b;cursor:pointer;font-size:15px">🗑</button></div>`+
+      `<div style="display:flex;gap:10px;flex-wrap:wrap">`+
+      `<div class="field" style="flex:1;min-width:120px"><label>하락 기준 (%)</label>`+
+      `<div class="stepper"><input inputmode="decimal" value="${rule.th}" onfocus="this.select()" onchange="setRuleTh(${i},this.value)">`+
+      `<div class="steparrows"><button type="button" onclick="stepRuleTh(${i},0.5)">▲</button><button type="button" onclick="stepRuleTh(${i},-0.5)">▼</button></div></div></div>`+
+      `<div class="field" style="flex:1;min-width:120px"><label>회당 매수금 ($)</label><input inputmode="numeric" value="${rule.amt}" onfocus="this.select()" onchange="setRuleAmt(${i},this.value)"></div>`+
+      `</div></div>`;
+  });
+  box.innerHTML=h;
+}
 function setVolBase(b){ ST.volBase=b; save(true); document.querySelectorAll('#view-vol .seg span').forEach(x=>x.classList.toggle('on',x.dataset.b===b)); renderVol(); }
-function syncModeUI(){
-  const m=C().mode;
-  document.querySelectorAll('#view-drop .seg span').forEach(x=>x.classList.toggle('on',x.dataset.m===m));
-  const el=$('mode-desc');
-  if(el){
-    if(m==='A') el.textContent='조건 · 장중 저가가 [전일종가×(1+기준%)] 지정가에 닿으면 그 가격에 매수';
-    else if(m==='B') el.textContent='조건 · 종가가 전일比 기준% 이상 하락 마감하면 종가에 매수';
-    else el.textContent='조건 · A(장중 지정가)와 B(종가) 각각 판정 → 둘 다 맞으면 하루 2회 매수 (A·B 하락% 따로 지정)';
-  }
-  // AB 모드면 A/B 두 칸, 아니면 단일 칸
-  const isAB=(m==='AB');
-  $('fld-th').classList.toggle('hidden',isAB);
-  $('fld-thA').classList.toggle('hidden',!isAB);
-  $('fld-thB').classList.toggle('hidden',!isAB);
-}
 
 // init
 document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tk===ST.ticker));
 document.querySelectorAll('.seg span').forEach(s=>{ if(s.dataset.v) s.classList.toggle('on',s.dataset.v===ST.view); });
 document.querySelectorAll('#view-vol .seg span').forEach(x=>x.classList.toggle('on',x.dataset.b===(ST.volBase||'C')));
-document.querySelectorAll('#view-drop .seg span').forEach(x=>x.classList.toggle('on',x.dataset.m===C().mode));
 ['drop','vol','data'].forEach(x=>$('view-'+x).classList.toggle('hidden',x!==ST.view));
 refreshYears();
 renderAll();
