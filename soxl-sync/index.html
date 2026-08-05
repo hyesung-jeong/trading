@@ -190,7 +190,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v13</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v14</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1904,14 +1904,17 @@ function csModeToggle(on){ CS_MODE=on;
   try{ localStorage.setItem('cs_mode',JSON.stringify({on:CS_MODE,sf:CS_SF})); }catch(e){} run(); }
 function csResetDefault(){
   // 슬롯을 동파30+듀얼70+현금off로 초기화, 세컨동시 ON, 세컨몫 35
-  SLOTS=[
-    {id:newSlotId(), type:'dongpa', name:'동파1', on:true, w:30, params:{}},
-    {id:newSlotId(), type:'dual',   name:'듀얼1', on:true, w:70, params:{}},
-    {id:newSlotId(), type:'cash',   name:'현금',  on:false, w:0, params:{}}
-  ];
   // 동파·듀얼 파라미터를 추천1(세컨동시) 값으로 설정 (MDD 15% 이내 나오는 값)
   const rec={g_nPos:'6',g_cycle:'10',g_aggHold:'7',g_aggBuy:'-5',g_aggProfit:'4.0',g_safeHold:'30',g_safeBuy:'-3',g_safeProfit:'0.5',
     d_nAtk:'6',d_atkBuy:'8.0',d_atkBuyNeg:'-0.1',d_sellA:'0.4',d_holdA:'2.0',d_nDef:'5',d_defHold:'8',d_defBuy1:'-0.6',d_defBuy2:'5.5',d_defSell:'0.7',d_maN:'3',d_atkW:'',d_defW:'6/13/20/27/34'};
+  // 슬롯 params에 추천1 값을 명시적으로 넣음 (빈값이면 전역칸 폴백돼 꼬임 → 반드시 채움)
+  const gParams={}, dParams={};
+  for(const k in rec){ if(k.startsWith('g_')) gParams[k]=rec[k]; else if(k.startsWith('d_')) dParams[k]=rec[k]; }
+  SLOTS=[
+    {id:newSlotId(), type:'dongpa', name:'동파1', on:true, w:30, params:gParams},
+    {id:newSlotId(), type:'dual',   name:'듀얼1', on:true, w:70, params:dParams},
+    {id:newSlotId(), type:'cash',   name:'현금',  on:false, w:0, params:{}}
+  ];
   for(const k in rec){ const el=document.getElementById(k); if(el) el.value=rec[k]; }
   CS_MODE=true; CS_SF=35;
   const c=document.getElementById('cs_mode'); if(c)c.checked=true;
@@ -1936,6 +1939,7 @@ function run(){
     if(!w){ if(bd)bd.innerHTML='<span style="color:var(--neg)">동파·듀얼 슬롯을 추가하세요</span>'; blank(); return; }
     const sf=CS_SF/100;
     if(bd)bd.innerHTML=`메인: 동파 ${(w.gW*(1-sf)).toFixed(0)}% + 듀얼 ${(w.dW*(1-sf)).toFixed(0)}%<br>세컨: 동파 ${(w.gW*sf).toFixed(0)}% + 듀얼 ${(w.dW*sf).toFixed(0)}%`;
+    // 세컨동시는 화면 파라미터 입력칸(전역칸)을 그대로 사용 → 화면에서 바꾸면 즉시 반영
     const res=runCombinedSecond(w.gW, w.dW, sf);
     renderCombined(res, w);
     try{ saveAll(); }catch(e){}
@@ -2576,6 +2580,11 @@ function loadAll(){
   // 수수료 복원
   if(d.fee){ const fo=document.getElementById('fee-on'), fp=document.getElementById('fee-pct');
     if(fo) fo.checked=!!d.fee.on; if(fp&&d.fee.pct!=null) fp.value=d.fee.pct; }
+  // 활성 동파/듀얼 슬롯의 params를 전역칸에 반영 (슬롯 params가 진실 → 전역칸과 일치시킴)
+  ['dongpa','dual'].forEach(function(type){
+    const sl=SLOTS.find(function(s){ return s.on && s.type===type; });
+    if(sl && sl.params){ for(const k in sl.params){ const el=document.getElementById(k); if(el) el.value=sl.params[k]; } }
+  });
   return true;
 }
 
@@ -3189,9 +3198,17 @@ csModeToggle(CS_MODE);
 (function bindParamInputs(){
   const ids=['g_nPos','g_cycle','g_safeBuy','g_safeProfit','g_safeHold','g_aggBuy','g_aggProfit','g_aggHold',
     'd_nAtk','d_atkBuy','d_atkBuyNeg','d_sellA','d_holdA','d_atkW','d_nDef','d_defHold','d_defBuy1','d_defBuy2','d_defSell','d_maN','d_defW'];
+  // 파라미터 입력칸을 바꾸면 그 값을 활성 동파/듀얼 슬롯의 params에도 저장
+  // → 전역칸과 슬롯 params가 항상 일치 (클라우드 재로드/모드전환 시 값 되돌아가는 꼬임 방지)
+  function syncGlobalToSlot(id){
+    const val=(document.getElementById(id)||{}).value;
+    const type = id.startsWith('g_') ? 'dongpa' : (id.startsWith('d_') ? 'dual' : null);
+    if(!type) return;
+    SLOTS.forEach(function(sl){ if(sl.type===type && sl.on){ sl.params=sl.params||{}; sl.params[id]=val; } });
+  }
   ids.forEach(function(id){ const inp=document.getElementById(id); if(!inp) return;
-    inp.addEventListener('change', function(){ try{ if(typeof renderTwdg==='function' && id==='g_nPos') renderTwdg(); }catch(e){} try{ saveAll(); }catch(e){} run(); });
-    inp.addEventListener('input', function(){ try{ saveAll(); }catch(e){} run(); });
+    inp.addEventListener('change', function(){ syncGlobalToSlot(id); try{ if(typeof renderTwdg==='function' && id==='g_nPos') renderTwdg(); }catch(e){} try{ saveAll(); }catch(e){} run(); });
+    inp.addEventListener('input', function(){ syncGlobalToSlot(id); try{ saveAll(); }catch(e){} run(); });
   });
 })();
 // 초기 렌더 보장 (DOM 준비 후 한 번 더)
