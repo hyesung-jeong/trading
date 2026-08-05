@@ -190,7 +190,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v14</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v16</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -733,19 +733,20 @@ function runCombinedSecond(gW, dW, secFrac){
   }
   function dlFull(E,mode){ if(mode===1){for(let k=0;k<nA;k++)if(!E.aocc[k])return false;return true;} else {for(let k=0;k<nD;k++)if(!E.docc[k])return false;return true;} }
   function dlAsset(E,price){let h=0;for(let k=0;k<nA;k++)if(E.aocc[k])h+=E.ash[k];for(let k=0;k<nD;k++)if(E.docc[k])h+=E.dsh[k];return E.cash+h*price;}
+  const secStart={}; // 연도 -> 세컨 첫 발동 ymd
   for(let i=startI;i<n;i++){
     if(warm[i])continue;
     if(years[i]!==curYear){ resetAll(); curYear=years[i]; }
     prevClose=closes[i-1];
     stepDg(Gm,i,true); stepDl(Dm,i,true);
-    if(!secOn && mainFullPrev){ secOn=true; Gs.active=true; Ds.active=true; }
+    if(!secOn && mainFullPrev){ secOn=true; Gs.active=true; Ds.active=true; if(secStart[years[i]]===undefined) secStart[years[i]]=DATA[i][0]; }
     stepDg(Gs,i,secOn); stepDl(Ds,i,secOn);
     const price=closes[i];
     const total=dgAsset(Gm,price)+dlAsset(Dm,price)+(secOn?dgAsset(Gs,price):Gs.cash)+(secOn?dlAsset(Ds,price):Ds.cash);
     daily.push({ymd:DATA[i][0],year:years[i],asset:total});
     mainFullPrev = dgFull(Gm) && dlFull(Dm, modes[i]);
   }
-  return aggregate(daily, totalCap);
+  const agg=aggregate(daily, totalCap); agg.secStart=secStart; return agg;
 }
 const FEE=0.00044+0.00044*0+0.0000278; // 매수수수료 근사 (검증에서 보정)
 function arr(n,v){return new Array(n).fill(v);}
@@ -1331,6 +1332,8 @@ function applyPreset(id, presetId){
   const pr=presetsFor(sl.type).find(p=>p.id===presetId); if(!pr) return;
   sl.params=Object.assign({}, pr.p);
   sl.presetId=pr.id;
+  // 세컨동시 계산은 전역 입력칸을 읽으므로, 활성 슬롯이면 프리셋 값을 전역칸에도 반영
+  if(sl.on){ for(const k in sl.params){ const el=document.getElementById(k); if(el) el.value=sl.params[k]; } }
   saveAll(); openSlotParams(id); renderWeights(); run();
 }
 // ===== 사용자 편집 가능 프리셋 저장소 (기본 프리셋 포함, 클라우드 동기화) =====
@@ -1630,7 +1633,10 @@ function showYearChartCS(year){
 }
 
 function setSlotParam(id,pid,val){ const sl=slotById(id); if(!sl) return;
-  if(!sl.params) sl.params={}; sl.params[pid]=val; saveAll(); openSlotParams(id); renderWeights(); }
+  if(!sl.params) sl.params={}; sl.params[pid]=val;
+  // 세컨동시 계산은 전역 입력칸을 읽으므로, 활성 슬롯이면 전역칸에도 반영 후 재계산
+  if(sl.on){ const el=document.getElementById(pid); if(el) el.value=val; }
+  saveAll(); openSlotParams(id); renderWeights(); run(); }
 function setSlotTwDf(id,i,val,nN){ const sl=slotById(id); if(!sl) return;
   if(!sl.params) sl.params={};
   let tw=sl.params['df_tw'];
@@ -1968,9 +1974,11 @@ function renderCombined(res, w){
   setSub("m-mdd-cum", `연도별 최악`); setSub("m-calmar-cum", ``);
   setCard("m-worst",worstRet); const wy=document.getElementById("m-worsty"); if(wy)wy.textContent=worstYear||"";
   window._csRes=res;  // 세컨동시 결과 저장 (연도 차트용)
+  const secS=res.secStart||{};
+  const fmtSec=(y)=>{ const d=secS[y]; if(!d) return '<span style="color:var(--faint);font-size:9px">세컨 미발동</span>'; const mo=d.slice(2,4),dy=d.slice(4,6); return `<span style="color:var(--accent2);font-size:9px" title="세컨 발동일">▶${mo}/${dy}</span>`; };
   let yb=""; years.forEach(y=>{ const r=res.yearly[y]; const c=r.mdd!==0?r.ret/Math.abs(r.mdd):0;
     const mx=(r.maxRet!==undefined?r.maxRet:r.ret), mn=(r.minRet!==undefined?r.minRet:r.ret);
-    yb+=`<tr onclick="showYearChartCS(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%</td>`+
+    yb+=`<tr onclick="showYearChartCS(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈<br>${fmtSec(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%</td>`+
       `<td class="pos">+${mx.toFixed(1)}%</td>`+
       `<td class="${mn>=0?'pos':'neg'}">${mn>=0?'+':''}${mn.toFixed(1)}%</td>`+
       `<td class="neg">${r.mdd.toFixed(1)}%</td><td>—</td><td>${c.toFixed(2)}</td></tr>`; });

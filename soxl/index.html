@@ -640,14 +640,14 @@ function runDualSecond(rows, P, wMainFrac, wSecFrac){
   const totalCap=P.initCap;
   const M=mkD(totalCap*wMainFrac), S=mkD(totalCap*wSecFrac); S.active=false;
   let curYear=years[startI]; let mainFullPrev=false;
-  const daily=[];
+  const daily=[]; const secStart={};
   for(let i=startI;i<n;i++){
     if(warm[i]) continue;
     if(years[i]!==curYear){ resetD(M); resetD(S); S.active=false; S.everStarted=false; mainFullPrev=false; curYear=years[i]; }
     const mode=modes[i];
     stepD(M,i,false);
     const mainFullNow=isFull(M,mode);
-    if(!S.active && mainFullPrev){ S.active=true; }
+    if(!S.active && mainFullPrev){ S.active=true; if(secStart[years[i]]===undefined) secStart[years[i]]=rows[i][0]; }
     stepD(S,i,true);
     // 세컨은 한번 발동하면 중지없이 연말까지 유지 (정지 로직 제거)
     const mAsset=(M.assetNow!==undefined?M.assetNow:M.cash);
@@ -655,7 +655,7 @@ function runDualSecond(rows, P, wMainFrac, wSecFrac){
     daily.push({ymd:rows[i][0], year:years[i], asset:mAsset+sAsset});
     mainFullPrev=mainFullNow;
   }
-  return aggregate(daily, totalCap);
+  const agg=aggregate(daily, totalCap); agg.secStart=secStart; return agg;
 }
 const FEE=0.00044+0.00044*0+0.0000278; // 매수수수료 근사 (검증에서 보정)
 function arr(n,v){return new Array(n).fill(v);}
@@ -709,13 +709,14 @@ function runDongpaSecond(rows, P, wMainFrac, wSecFrac){
   rows.forEach((r,i)=>{ if(r[6]===1) return; const y=2000+parseInt(r[0].slice(0,2));
     if(!(y in byYear)){ byYear[y]=[]; firstIdxOfYear[y]=i; } byYear[y].push({r:r, dr:drAll[i]}); });
   const years=Object.keys(byYear).map(Number).sort((a,b)=>a-b);
-  const yearly={}; const series={}; const tlog=[];
+  const yearly={}; const series={}; const tlog=[]; const secStart={};
   years.forEach(y=>{
     let pyc=0; const fi=firstIdxOfYear[y]; if(fi>0) pyc=rows[fi-1][1];
     const r=btYearSecond(byYear[y],P,tlog,pyc,wMainFrac,wSecFrac);
     yearly[y]={ret:r.ret,mdd:r.mdd,maxRet:r.maxRet,minRet:r.minRet};
+    if(r.secStartYmd) secStart[y]=r.secStartYmd;
     r.series.forEach(d=>{ series[d.ymd]=d.mult; }); });
-  return {yearly, years, series, tlog};
+  return {yearly, years, series, tlog, secStart};
 }
 // 한 해 안에서 메인+세컨을 동시에 시뮬레이션
 function btYearSecond(items,P,tlog,prevYearClose,wMainFrac,wSecFrac){
@@ -731,6 +732,7 @@ function btYearSecond(items,P,tlog,prevYearClose,wMainFrac,wSecFrac){
   let prevClose=prevYearClose||0;
   const series=[];
   let mainFullPrevDay=false; // 전일 메인이 풀티어였나
+  let secStartYmd=null; // 이 연도 세컨 첫 발동일
   function stepEngine(E, price, dret, mode, dayNum, isSecond){
     if(!E.active) return;
     if(dayNum>10 && (dayNum-1)%P.cycle===0){ E.investBase+=E.periodPnl; E.posSize=E.investBase/P.nPos; E.periodPnl=0; }
@@ -768,7 +770,7 @@ function btYearSecond(items,P,tlog,prevYearClose,wMainFrac,wSecFrac){
     stepEngine(M, price, dret, mode, dayNum, false);
     const mainFullNow=(Object.keys(M.positions).length===P.nPos);
     // 2) 세컨 활성화 판정: 전일 메인 풀티어였으면 오늘부터 세컨 가동
-    if(!S.active && mainFullPrevDay){ S.active=true; }
+    if(!S.active && mainFullPrevDay){ S.active=true; if(!secStartYmd) secStartYmd=items[day].r[0]; }
     // 3) 세컨 스텝 (활성 상태일 때만)
     stepEngine(S, price, dret, mode, dayNum, true);
     // 4) 둘 다 포지션 0 → 세컨 정지 & 현금 회수 대기
@@ -789,7 +791,7 @@ function btYearSecond(items,P,tlog,prevYearClose,wMainFrac,wSecFrac){
   for(const t in S.positions) cashEnd+=S.positions[t].sh*fp;
   const ret=(cashEnd/totalCap-1)*100;
   const maxRet=(peak/totalCap-1)*100; const minRet=(minTotal/totalCap-1)*100;
-  return {ret:ret, mdd:-maxDD, maxRet:maxRet, minRet:minRet, series:series};
+  return {ret:ret, mdd:-maxDD, maxRet:maxRet, minRet:minRet, series:series, secStartYmd:secStartYmd};
 }
 
 function backtestYear(items,P,tlog,prevYearClose){
@@ -1809,12 +1811,21 @@ function render(results){
   setSub("m-mdd-cum", `누적 ${cumMdd.toFixed(1)}%`);
   setSub("m-calmar-cum", `누적 ${cumCalmar.toFixed(2)}`);
   setCard("m-worst",worstRet); document.getElementById("m-worsty").textContent=worstYear||"";
+  // 세컨 켜진 슬롯들의 연도별 발동일 모음 (여러 슬롯이면 매매법 라벨과 함께)
+  const secByYear={};
+  active.forEach(sid=>{ const sl=slotById(sid); const rr=results[sid];
+    if(sl&&sl.sec&&rr&&rr.secStart){ for(const y in rr.secStart){ (secByYear[y]=secByYear[y]||[]).push({t:sl.type,ymd:rr.secStart[y]}); } } });
+  const anySec=active.some(sid=>{ const sl=slotById(sid); return sl&&sl.sec; });
+  const fmtSecY=(y)=>{ if(!anySec) return '';
+    const list=secByYear[y]; if(!list||!list.length) return '<br><span style="color:var(--faint);font-size:9px">세컨 미발동</span>';
+    const parts=list.map(o=>{ const nm=o.t==='dongpa'?'동':(o.t==='dual'?'듀':''); return `${nm}▶${o.ymd.slice(2,4)}/${o.ymd.slice(4,6)}`; });
+    return `<br><span style="color:var(--accent2);font-size:9px" title="세컨 발동일">${parts.join(' ')}</span>`; };
   let yb=""; years.forEach(y=>{ const r=port[y]; const c=r.mdd!==0?r.ret/Math.abs(r.mdd):0;
     const mx=(r.maxRet!==undefined?r.maxRet:r.ret);
     const mn=(r.minRet!==undefined?r.minRet:r.ret);
     const uw=yearUnderwater(results, active, wsum, y);
     const uwTxt=uw.maxUw+'일'+(uw.recovered?'':'*');
-    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%</td>`+
+    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈${fmtSecY(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%</td>`+
       `<td class="pos">+${mx.toFixed(1)}%</td>`+
       `<td class="${mn>=0?'pos':'neg'}">${mn>=0?'+':''}${mn.toFixed(1)}%</td>`+
       `<td class="neg">${r.mdd.toFixed(1)}%</td>`+
