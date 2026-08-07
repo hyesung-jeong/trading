@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v11</title>
+<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v12</title>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
 <style>
 :root{--bg:#fff;--card:#f7f8fa;--line:#e6e8ec;--ink:#191c22;--sub:#6b7280;--mut:#9aa1ad;--acc:#0f766e;--up:#dc2626;--dn:#2563eb}
@@ -55,7 +55,7 @@ canvas{width:100%;display:block}
 </head>
 <body>
 <div class="wrap">
-  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;padding:2px 8px;border-radius:6px">SOXL/TQQQ/QQQ/QLD · v11 바닥잡기</span></h1>
+  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;padding:2px 8px;border-radius:6px">SOXL/TQQQ/QQQ/QLD · v12 바닥잡기</span></h1>
   <div class="sub" id="datarange">–</div>
   <div class="sub" id="sync-status" style="cursor:pointer"></div>
 
@@ -350,6 +350,7 @@ function calcDrop(){
     // 매수 이벤트 수집 (여러 규칙 동시 — 각 규칙이 독립 발동)
     const events=[];
     (cf.rules||[]).forEach((rule,ri)=>{
+      if(rule.off) return;  // 비활성 규칙 스킵
       const amt=rule.amt!==undefined?rule.amt:cf.amt;
       if(rule.base==='B'){
         // 바닥잡기: SOXX RSI 신호일에 현재종목 종가 매수
@@ -382,6 +383,7 @@ function calcDrop(){
     yr.forEach(r=>{
       const events=[];
       (cf.rules||[]).forEach(rule=>{
+        if(rule.off) return;
         const amt=rule.amt!==undefined?rule.amt:cf.amt;
         if(rule.base==='B'){ if(bottomSig[r.d]) events.push({px:r.c,amt}); }
         else if(rule.base==='L'){ const limit=r.pc*(1+rule.th/100); if(r.lo<=limit) events.push({px:limit,amt}); }
@@ -502,7 +504,7 @@ function renderDrop(){
   // 합계 행 (전체 매수한 날/전체 거래일)
   if(totCnt>0){ const tpct=totDays>0?(totBuyDays/totDays*100):0;
     yb.innerHTML+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td>합계</td><td>${totCnt}회</td><td style="color:var(--sub)">${tpct.toFixed(0)}%</td><td colspan="4"></td></tr>`; }
-  const showKind=((C().rules||[]).length>1);
+  const showKind=((C().rules||[]).filter(x=>!x.off).length>1);
   $('buybody').innerHTML=R.buys.map(b=>`<tr><td>${dstr(b.d)}${showKind&&b.kind?' <span style="color:var(--mut);font-size:10px">'+b.kind+'</span>':''}</td><td>$${b.c.toFixed(2)}</td><td class="neg">${b.chg.toFixed(1)}%</td><td>${b.q.toFixed(1)}</td><td>${b.cum.toFixed(0)}</td></tr>`).join('');
   drawLine(R.series);
   // 스캔이 펼쳐져 있으면 기간·조건 변경 반영해 다시 계산
@@ -530,7 +532,7 @@ function scanBuy(keepOpen){
   if(!keepOpen){ wrap.classList.toggle('hidden'); }
   if(wrap.classList.contains('hidden')) return;
   const cf=C();
-  const sp=$('scanperiod'); if(sp) sp.textContent=`(${cf.y0}~${cf.y1} · 규칙 ${(cf.rules||[]).length}개)`;
+  const sp=$('scanperiod'); if(sp) sp.textContent=`(${cf.y0}~${cf.y1} · 규칙 ${(cf.rules||[]).filter(x=>!x.off).length}개)`;
   // 하락% 후보: -3 ~ -20 (0.5단위는 너무 많으니 1단위)
   const cands=[];
   for(let p=-3;p>=-20;p--) cands.push(p);
@@ -735,6 +737,10 @@ function removeRule(i){
   const cf=C(); if(!cf.rules)return;
   cf.rules.splice(i,1); save(true); renderRules(); renderDrop();
 }
+function toggleRule(i){
+  const cf=C(); if(!cf.rules||!cf.rules[i])return;
+  cf.rules[i].off=!cf.rules[i].off; save(true); renderRules(); renderDrop();
+}
 function setRuleTh(i,v){ const cf=C(); const x=parseFloat(v); if(!isNaN(x)&&x<0){ cf.rules[i].th=x; save(true); renderDrop(); } }
 function stepRuleTh(i,delta){ const cf=C(); let v=parseFloat(cf.rules[i].th); if(isNaN(v))v=0; v=Math.round((v+delta)*2)/2; if(v>-0.5)v=-0.5; cf.rules[i].th=v; save(true); renderRules(); renderDrop(); }
 function setRuleAmt(i,v){ const cf=C(); const x=parseFloat(v); if(!isNaN(x)&&x>0){ cf.rules[i].amt=x; save(true); renderDrop(); } }
@@ -752,8 +758,9 @@ function renderRules(){
       : `<div class="field" style="flex:1;min-width:120px"><label>하락 기준 (%)</label>`+
         `<div class="stepper"><input inputmode="decimal" value="${rule.th}" onfocus="this.select()" onchange="setRuleTh(${i},this.value)">`+
         `<div class="steparrows"><button type="button" onclick="stepRuleTh(${i},0.5)">▲</button><button type="button" onclick="stepRuleTh(${i},-0.5)">▼</button></div></div></div>`;
-    h+=`<div style="border:1px solid var(--line,#ddd);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--panel2,#fafafa)">`+
-      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">${badge}`+
+    h+=`<div style="border:1px solid var(--line,#ddd);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--panel2,#fafafa);opacity:${rule.off?0.5:1}">`+
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer">`+
+      `<input type="checkbox" ${rule.off?'':'checked'} onchange="toggleRule(${i})" style="width:17px;height:17px">${badge}</label>`+
       `<button type="button" onclick="removeRule(${i})" style="border:none;background:transparent;color:#c0392b;cursor:pointer;font-size:15px">🗑</button></div>`+
       `<div style="display:flex;gap:10px;flex-wrap:wrap">`+
       thField+
