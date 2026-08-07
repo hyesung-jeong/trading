@@ -282,7 +282,7 @@
             <div class="prow"><label>보유한계<span class="phint">일</span></label><div class="stepper"><input id="g_aggHold" value="7"><div class="steparrows"><button type="button" onclick="stepInput('g_aggHold',1)">▲</button><button type="button" onclick="stepInput('g_aggHold',-1)">▼</button></div></div></div>
             <div class="psub">공통</div>
             <div class="prow"><label>복리정산주기<span class="phint">일</span></label><div class="stepper"><input id="g_cycle" value="10"><div class="steparrows"><button type="button" onclick="stepInput('g_cycle',1)">▲</button><button type="button" onclick="stepInput('g_cycle',-1)">▼</button></div></div></div>
-            <div class="prow"><label>시가+종가 이중매도<span class="phint">시가 익절→안되면 종가</span></label><div class="stepper" style="justify-content:flex-end"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="g_dblSell" onchange="var l=document.getElementById('g_dblSellLbl');if(l)l.textContent=this.checked?'ON':'OFF';saveAll&&saveAll();run&&run()" style="width:18px;height:18px"><span id="g_dblSellLbl" style="font-size:13px;color:#64748b">OFF</span></label></div></div>
+            <input type="checkbox" id="g_dblSell" style="display:none">
             <div class="prow"><label>분할개수</label><div class="stepper"><input id="g_nPos" value="6" onchange="if(typeof renderTwdg==='function')renderTwdg()"><div class="steparrows"><button type="button" onclick="stepInput('g_nPos',1)">▲</button><button type="button" onclick="stepInput('g_nPos',-1)">▼</button></div></div></div>
             <div style="margin-top:10px"><button type="button" id="twdg-btn" onclick="toggleTwdg()" style="width:100%;border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;font-size:12px;padding:6px;border-radius:6px">티어 비중 조절</button></div>
             <div class="tw-inline" id="tw-dongpa" style="margin-top:8px"></div>
@@ -5284,7 +5284,7 @@ function nextTypeName(type){ // 동파2, 동파3...
 function withSlotParams(slot, fn){
   const p=slot.params||{};
   const bak={};
-  for(const id in p){ if(id==='df_tw') continue; const el=document.getElementById(id); if(el){ bak[id]=el.value; el.value=p[id]; } }
+  for(const id in p){ if(id==='df_tw') continue; const el=document.getElementById(id); if(el){ if(el.type==='checkbox'){ bak[id]=el.checked?'1':'0'; el.checked=(String(p[id])==='1'); } else { bak[id]=el.value; el.value=p[id]; } } }
   // 떨프 슬롯별 티어비중: 전역 TWDF를 잠깐 교체
   let twBak=null, twChanged=false;
   if(slot.type==='dropf' && p['df_tw']!==undefined){
@@ -5313,7 +5313,7 @@ function withSlotParams(slot, fn){
     else { TWDG_ON=false; }
   }
   let r; try{ r=fn(); } finally {
-    for(const id in bak){ const el=document.getElementById(id); if(el) el.value=bak[id]; }
+    for(const id in bak){ const el=document.getElementById(id); if(el){ if(el.type==='checkbox'){ el.checked=(String(bak[id])==='1'); } else { el.value=bak[id]; } } }
     if(twChanged) TWDF=twBak;
     if(m3Bak){ TBUY=m3Bak.TBUY; TSELL=m3Bak.TSELL; THOLD=m3Bak.THOLD; TW=m3Bak.TW; }
     if(dgBak){ TWDG_ON=dgBak.on; TWDG=dgBak.arr; }
@@ -5581,10 +5581,17 @@ function openSlotParams(id){
   groups.forEach(g=>{
     h+=`<div style="font-weight:600;font-size:13px;margin:12px 0 6px">${g.name}</div>`;
     h+=`<table class="holdtable"><tbody>`;
-    g.rows.forEach(([pid,label,desc])=>{
-      const gEl=document.getElementById(pid); const gval=gEl?gEl.value:'';
+    g.rows.forEach(([pid,label,desc,ftype])=>{
+      const gEl=document.getElementById(pid);
+      const gval=gEl?(ftype==='check'?(gEl.checked?'1':'0'):gEl.value):'';
       const val=(ap[pid]!==undefined)?ap[pid]:gval;
       const isCustom=(ap[pid]!==undefined && String(ap[pid])!==String(gval));
+      if(ftype==='check'){
+        const on=String(val)==='1';
+        h+=`<tr><td style="text-align:left">${label}<span style="color:var(--faint);font-size:11px"> ${desc}</span></td>
+          <td style="text-align:right"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;justify-content:flex-end"><input type="checkbox" ${on?'checked':''} onchange="setSlotParam('${id}','${pid}',this.checked?'1':'0')" style="width:18px;height:18px"><span style="font-size:12px;color:var(--faint)">${on?'ON':'OFF'}</span></label></td></tr>`;
+        return;
+      }
       h+=`<tr><td style="text-align:left">${label}<span style="color:var(--faint);font-size:11px"> ${desc}</span></td>
         <td style="text-align:right"><input value="${val}" onchange="setSlotParam('${id}','${pid}',this.value)" style="width:90px;text-align:right;background:${isCustom?'#fff7e6':'var(--panel)'};border:1px solid ${isCustom?'#e0a82e':'var(--line)'};color:var(--ink);font-family:var(--mono);font-size:13px;padding:5px 8px;border-radius:5px"></td></tr>`;
     });
@@ -6820,7 +6827,7 @@ function applyAcctParams(params){
 }
 function restoreParams(bak){
   if(!bak) return;
-  for(const id in bak){ const el=document.getElementById(id); if(el) el.value=bak[id]; }
+  for(const id in bak){ const el=document.getElementById(id); if(el){ if(el.type==='checkbox'){ el.checked=(String(bak[id])==='1'); } else { el.value=bak[id]; } } }
 }
 
 
@@ -7242,6 +7249,7 @@ const PARAM_GROUPS=[
   {name:'동파 · 공통', rows:[
     ['g_nPos','분할개수','티어 수'],
     ['g_cycle','복리정산주기','거래일'],
+    ['g_dblSell','시가+종가 이중매도','1=ON, 0=OFF (시가 익절→안되면 종가)','check'],
   ]},
   {name:'떨프 (모드없음)', rows:[
     ['df_nPos','분할수','티어 수'],
@@ -7306,10 +7314,18 @@ function renderParams(){
   PARAM_GROUPS.forEach(g=>{
     h+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h">${g.name}</div><div class="panel-b" style="padding:0">`;
     h+=`<table class="holdtable"><thead><tr><th>항목</th><th>값</th><th style="text-align:left">설명</th></tr></thead><tbody>`;
-    g.rows.forEach(([id,label,desc])=>{
-      const gEl=document.getElementById(id); const gval=gEl?gEl.value:'';
+    g.rows.forEach(([id,label,desc,ftype])=>{
+      const gEl=document.getElementById(id);
+      const gval=gEl?(ftype==='check'?(gEl.checked?'1':'0'):gEl.value):'';
       const val=(ap[id]!==undefined)?ap[id]:gval;  // 계좌값 우선, 없으면 전역 기본
       const isCustom=(ap[id]!==undefined&&String(ap[id])!==String(gval));
+      if(ftype==='check'){
+        const on=String(val)==='1';
+        h+=`<tr><td style="text-align:left">${label}</td>
+          <td><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" ${on?'checked':''} onchange="setParam('${id}',this.checked?'1':'0')" style="width:18px;height:18px"><span style="font-size:12px;color:var(--sub)">${on?'ON':'OFF'}</span></label></td>
+          <td style="text-align:left;color:var(--sub);font-size:12px">${desc}</td></tr>`;
+        return;
+      }
       h+=`<tr><td style="text-align:left">${label}</td>
         <td><input type="text" value="${val}" onchange="setParam('${id}',this.value)" style="width:90px;text-align:right;background:${isCustom?'#fff7e6':'var(--panel)'};border:1px solid ${isCustom?'#e0a82e':'var(--line)'};color:var(--ink);font-family:var(--mono);font-size:13px;padding:6px 8px;border-radius:5px"></td>
         <td style="text-align:left;color:var(--dim);font-size:12px">${desc}</td></tr>`;
