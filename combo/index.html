@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v12</title>
+<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v16</title>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
 <style>
 :root{--bg:#fff;--card:#f7f8fa;--line:#e6e8ec;--ink:#191c22;--sub:#6b7280;--mut:#9aa1ad;--acc:#0f766e;--up:#dc2626;--dn:#2563eb}
@@ -55,7 +55,7 @@ canvas{width:100%;display:block}
 </head>
 <body>
 <div class="wrap">
-  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;padding:2px 8px;border-radius:6px">SOXL/TQQQ/QQQ/QLD · v12 바닥잡기</span></h1>
+  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;padding:2px 8px;border-radius:6px">SOXL/TQQQ/QQQ/QLD · v16 바닥잡기</span></h1>
   <div class="sub" id="datarange">–</div>
   <div class="sub" id="sync-status" style="cursor:pointer"></div>
 
@@ -306,11 +306,44 @@ function getRows(tk){
 }
 
 // ===== SOXX 바닥잡기 신호 (RSI14<46.5 AND RSI가 20일이평 상향돌파) =====
-let _bottomSignalCache=null;
-function getBottomSignals(){
-  if(_bottomSignalCache) return _bottomSignalCache;
-  const soxx=RAW['SOXX']; if(!soxx){ return {}; }
-  const closes=soxx.map(r=>r[1]); const dates=soxx.map(r=>r[0]);
+let _bottomSignalCache={};
+// 종목별 바닥잡기 기준지수 기본값: 반도체군→SOXX, 나스닥군→QQQ
+function bottomIdxFor(tk){
+  const cf=(typeof C==='function')?C():null;
+  if(cf && cf.bottomIdx) return cf.bottomIdx;  // 종목 설정에 명시돼 있으면 우선
+  if(tk==='TQQQ'||tk==='QQQ'||tk==='QLD') return 'QQQ';
+  return 'SOXX';
+}
+function bottomThrDefault(idxTk,freq){ // 종목별·주기별 기본 임계값
+  if(freq==='W') return idxTk==='QQQ'?66.5:70.5;   // 주봉: 모든연도 최소1회 되는 값
+  return idxTk==='QQQ'?49.5:51.5;                    // 일봉
+}
+// yymmdd → ISO 주키
+function _ymdToWeek(ymd){
+  const y=2000+ +ymd.slice(0,2), m=+ymd.slice(2,4)-1, dd=+ymd.slice(4,6);
+  const d=new Date(Date.UTC(y,m,dd)); const day=(d.getUTCDay()+6)%7;
+  d.setUTCDate(d.getUTCDate()-day+3);
+  const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4));
+  const w=1+Math.round((d-ft)/(7*864e5)-((ft.getUTCDay()+6)%7)/7);
+  return d.getUTCFullYear()+'-'+String(w).padStart(2,'0');
+}
+function getBottomSignals(idxTk, thr, freq){
+  idxTk = idxTk || bottomIdxFor(ST.ticker);
+  freq = (freq==='W')?'W':'D';
+  if(thr==null) thr=bottomThrDefault(idxTk,freq);
+  const ckey=idxTk+'@'+thr+'@'+freq;
+  if(_bottomSignalCache[ckey]) return _bottomSignalCache[ckey];
+  const src=RAW[idxTk]; if(!src){ return {}; }
+  let closes, dates;
+  if(freq==='W'){
+    // 주봉: 각 주 마지막 거래일 종가, 대표날짜=그 주 마지막 거래일 yymmdd
+    const bw={};
+    src.forEach(r=>{ bw[_ymdToWeek(r[0])]={ymd:r[0],close:r[1]}; });
+    const arr=Object.values(bw).sort((a,b)=>a.ymd<b.ymd?-1:1);
+    closes=arr.map(o=>o.close); dates=arr.map(o=>o.ymd);
+  } else {
+    closes=src.map(r=>r[1]); dates=src.map(r=>r[0]);
+  }
   // Wilder RSI 14
   const P=14; const rsi=new Array(closes.length).fill(null);
   let gain=0,loss=0;
@@ -331,9 +364,9 @@ function getBottomSignals(){
   const sig={};
   for(let i=1;i<rsi.length;i++){
     if(rsi[i]==null||a1[i]==null||rsi[i-1]==null||a1[i-1]==null) continue;
-    if(rsi[i]<46.5 && rsi[i-1]<=a1[i-1] && rsi[i]>a1[i]){ sig[dates[i]]=true; }
+    if(rsi[i]<thr && rsi[i-1]<=a1[i-1] && rsi[i]>a1[i]){ sig[dates[i]]=true; }
   }
-  _bottomSignalCache=sig; return sig;
+  _bottomSignalCache[ckey]=sig; return sig;
 }
 
 const money=n=>'$'+Math.round(n).toLocaleString('en-US');
@@ -353,8 +386,11 @@ function calcDrop(){
       if(rule.off) return;  // 비활성 규칙 스킵
       const amt=rule.amt!==undefined?rule.amt:cf.amt;
       if(rule.base==='B'){
-        // 바닥잡기: SOXX RSI 신호일에 현재종목 종가 매수
-        if(bottomSig[r.d]){ events.push({px:r.c, chg:r.chg, kind:'B'+ri, amt}); }
+        // 바닥잡기: 기준지수(rule.idx, 기본 종목별 자동) RSI 신호일에 현재종목 종가 매수
+        const _idx=rule.idx||bottomIdxFor(ST.ticker);
+        const _fq=(rule.freq==='W')?'W':'D';
+        const _sig=getBottomSignals(_idx, rule.thr!=null?rule.thr:bottomThrDefault(_idx,_fq), _fq);
+        if(_sig[r.d]){ events.push({px:r.c, chg:r.chg, kind:'B'+ri, amt}); }
       } else if(rule.base==='L'){
         // 저가(장중): 전일종가 기준 지정가(th%)에 저가가 도달하면 그 지정가에 체결
         const limit=r.pc*(1+rule.th/100);
@@ -385,7 +421,7 @@ function calcDrop(){
       (cf.rules||[]).forEach(rule=>{
         if(rule.off) return;
         const amt=rule.amt!==undefined?rule.amt:cf.amt;
-        if(rule.base==='B'){ if(bottomSig[r.d]) events.push({px:r.c,amt}); }
+        if(rule.base==='B'){ const _idx=rule.idx||bottomIdxFor(ST.ticker); const _fq=(rule.freq==='W')?'W':'D'; const _sig=getBottomSignals(_idx, rule.thr!=null?rule.thr:bottomThrDefault(_idx,_fq), _fq); if(_sig[r.d]) events.push({px:r.c,amt}); }
         else if(rule.base==='L'){ const limit=r.pc*(1+rule.th/100); if(r.lo<=limit) events.push({px:limit,amt}); }
         else { if(r.chg<=rule.th) events.push({px:r.c,amt}); }
       });
@@ -741,6 +777,25 @@ function toggleRule(i){
   const cf=C(); if(!cf.rules||!cf.rules[i])return;
   cf.rules[i].off=!cf.rules[i].off; save(true); renderRules(); renderDrop();
 }
+function setRuleIdx(i,val){
+  const cf=C(); if(!cf.rules||!cf.rules[i])return;
+  cf.rules[i].idx=val; delete cf.rules[i].thr; save(true); renderRules(); renderDrop();
+}
+function setRuleThr(i,v){
+  const cf=C(); if(!cf.rules||!cf.rules[i])return;
+  const x=parseFloat(v); if(!isNaN(x)&&x>0&&x<100){ cf.rules[i].thr=x; save(true); renderDrop(); }
+}
+function setRuleFreq(i,f){
+  const cf=C(); if(!cf.rules||!cf.rules[i])return;
+  cf.rules[i].freq=(f==='W')?'W':'D'; delete cf.rules[i].thr; save(true); renderRules(); renderDrop();
+}
+function stepRuleThr(i,delta){
+  const cf=C(); if(!cf.rules||!cf.rules[i])return;
+  const _idx=cf.rules[i].idx||bottomIdxFor(ST.ticker);
+  let v=(cf.rules[i].thr!=null)?cf.rules[i].thr:bottomThrDefault(_idx);
+  v=Math.round((v+delta)*2)/2; if(v<1)v=1; if(v>99)v=99;
+  cf.rules[i].thr=v; save(true); renderRules(); renderDrop();
+}
 function setRuleTh(i,v){ const cf=C(); const x=parseFloat(v); if(!isNaN(x)&&x<0){ cf.rules[i].th=x; save(true); renderDrop(); } }
 function stepRuleTh(i,delta){ const cf=C(); let v=parseFloat(cf.rules[i].th); if(isNaN(v))v=0; v=Math.round((v+delta)*2)/2; if(v>-0.5)v=-0.5; cf.rules[i].th=v; save(true); renderRules(); renderDrop(); }
 function setRuleAmt(i,v){ const cf=C(); const x=parseFloat(v); if(!isNaN(x)&&x>0){ cf.rules[i].amt=x; save(true); renderDrop(); } }
@@ -753,8 +808,21 @@ function renderRules(){
     if(rule.base==='B') badge='<span style="font-size:11px;font-weight:700;color:#7c3aed;background:#f3ecfe;border:1px solid #d6bcfa;padding:2px 8px;border-radius:9px">🎯 SOXX 바닥잡기</span>';
     else if(rule.base==='L') badge='<span style="font-size:11px;font-weight:700;color:#b45309;background:#fef3e2;border:1px solid #f5d5a8;padding:2px 8px;border-radius:9px">저가(장중)</span>';
     else badge='<span style="font-size:11px;font-weight:700;color:#0f766e;background:#e6f5f3;border:1px solid #a8dfd8;padding:2px 8px;border-radius:9px">종가</span>';
+    const _bidx = rule.idx || bottomIdxFor(ST.ticker);
+    const _bfreq = (rule.freq==='W')?'W':'D';
+    const _bthr = (rule.thr!=null)?rule.thr:bottomThrDefault(_bidx,_bfreq);
+    const _funit = _bfreq==='W'?'주':'일';
     const thField = (rule.base==='B')
-      ? `<div class="field" style="flex:2;min-width:180px"><label>조건</label><div style="font-size:11px;color:var(--mut);padding:6px 0;line-height:1.4">SOXX RSI(14)&lt;46.5 이면서<br>RSI가 20일이평 상향돌파하는 날</div></div>`
+      ? `<div class="field" style="flex:2;min-width:180px"><label>바닥잡기 기준지수</label>`+
+        `<select onchange="setRuleIdx(${i},this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--line,#ddd);border-radius:6px;font-size:13px;background:var(--panel,#fff);color:var(--ink)">`+
+        `<option value="SOXX" ${_bidx==='SOXX'?'selected':''}>SOXX (반도체)</option>`+
+        `<option value="QQQ" ${_bidx==='QQQ'?'selected':''}>QQQ (나스닥100)</option>`+
+        `</select>`+
+        `<div class="seg" style="margin-top:6px;font-size:12px"><span class="${_bfreq==='D'?'on':''}" onclick="setRuleFreq(${i},'D')" style="cursor:pointer;padding:3px 10px">일봉</span><span class="${_bfreq==='W'?'on':''}" onclick="setRuleFreq(${i},'W')" style="cursor:pointer;padding:3px 10px">주봉</span></div>`+
+        `<div style="font-size:10px;color:var(--mut);padding:4px 0 0;line-height:1.3">${_bidx} ${_funit}봉 RSI(14)&lt;${_bthr} &amp; RSI가 20${_funit}이평 상향돌파</div></div>`+
+        `<div class="field" style="flex:1;min-width:110px"><label>RSI 임계값</label>`+
+        `<div class="stepper"><input inputmode="decimal" value="${_bthr}" onfocus="this.select()" onchange="setRuleThr(${i},this.value)">`+
+        `<div class="steparrows"><button type="button" onclick="stepRuleThr(${i},0.5)">▲</button><button type="button" onclick="stepRuleThr(${i},-0.5)">▼</button></div></div></div>`
       : `<div class="field" style="flex:1;min-width:120px"><label>하락 기준 (%)</label>`+
         `<div class="stepper"><input inputmode="decimal" value="${rule.th}" onfocus="this.select()" onchange="setRuleTh(${i},this.value)">`+
         `<div class="steparrows"><button type="button" onclick="stepRuleTh(${i},0.5)">▲</button><button type="button" onclick="stepRuleTh(${i},-0.5)">▼</button></div></div></div>`;
