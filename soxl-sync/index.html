@@ -5589,7 +5589,7 @@ function openSlotParams(id){
       if(ftype==='check'){
         const on=String(val)==='1';
         h+=`<tr><td style="text-align:left">${label}<span style="color:var(--faint);font-size:11px"> ${desc}</span></td>
-          <td style="text-align:right"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;justify-content:flex-end"><input type="checkbox" ${on?'checked':''} onchange="setSlotParam('${id}','${pid}',this.checked?'1':'0')" style="width:18px;height:18px"><span style="font-size:12px;color:var(--faint)">${on?'ON':'OFF'}</span></label></td></tr>`;
+          <td style="text-align:right"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;justify-content:flex-end"><input type="checkbox" ${on?'checked':''} onchange="setSlotParam('${id}','${pid}',this.checked?'1':'0',true)" style="width:18px;height:18px"><span style="font-size:12px;color:var(--faint)">${on?'ON':'OFF'}</span></label></td></tr>`;
         return;
       }
       h+=`<tr><td style="text-align:left">${label}<span style="color:var(--faint);font-size:11px"> ${desc}</span></td>
@@ -5660,7 +5660,19 @@ function openSlotParams(id){
   h+=`</div></div>`;
   let m=document.getElementById('slot-param-modal');
   if(!m){ m=document.createElement('div'); m.id='slot-param-modal'; document.body.appendChild(m); }
+  const _ov=m.firstElementChild; const _st=_ov?_ov.scrollTop:0;
+  let _focIdx=-1, _selS=null, _selE=null;
+  { const _ae=document.activeElement;
+    if(_ae && m.contains(_ae) && (_ae.tagName==='INPUT'||_ae.tagName==='SELECT')){
+      const _all=Array.prototype.slice.call(m.querySelectorAll('input,select'));
+      _focIdx=_all.indexOf(_ae);
+      try{ _selS=_ae.selectionStart; _selE=_ae.selectionEnd; }catch(e){}
+    } }
   m.innerHTML=h;
+  const _ov2=m.firstElementChild; if(_ov2&&_st) _ov2.scrollTop=_st;
+  if(_focIdx>=0){ const _all2=Array.prototype.slice.call(m.querySelectorAll('input,select'));
+    const _tgt=_all2[_focIdx];
+    if(_tgt){ _tgt.focus(); try{ if(_selS!=null&&_tgt.setSelectionRange)_tgt.setSelectionRange(_selS,_selE); }catch(e){} } }
 }
 function closeSlotParams(){ const m=document.getElementById('slot-param-modal'); if(m) m.innerHTML=''; renderWeights(); run(); }
 // ===== 언더워터 기간 (연도별: 그 해 전고점 회복까지 최장 거래일) =====
@@ -5773,25 +5785,25 @@ function showYearChartCS(year){
   m.innerHTML=h;
 }
 
-function setSlotParam(id,pid,val){ const sl=slotById(id); if(!sl) return;
+function setSlotParam(id,pid,val,rerender){ const sl=slotById(id); if(!sl) return;
   if(!sl.params) sl.params={}; sl.params[pid]=val;
   // 세컨동시 계산은 전역 입력칸을 읽으므로, 활성 슬롯이면 전역칸에도 반영 후 재계산
   if(sl.on){ const el=document.getElementById(pid); if(el) el.value=val; }
-  saveAll(); openSlotParams(id); renderWeights(); run(); }
+  saveAll(); if(rerender) openSlotParams(id); renderWeights(); run(); }
 function setSlotTwDf(id,i,val,nN){ const sl=slotById(id); if(!sl) return;
   if(!sl.params) sl.params={};
   let tw=sl.params['df_tw'];
   const eq=Math.round((100/nN)*10)/10;
   if(Array.isArray(tw)) tw=tw.slice(); else tw=Array(nN).fill(eq);
   while(tw.length<nN) tw.push(eq); if(tw.length>nN) tw=tw.slice(0,nN);
-  tw[i]=parseFloat(val)||0; sl.params['df_tw']=tw; saveAll(); openSlotParams(id); renderWeights(); }
+  tw[i]=parseFloat(val)||0; sl.params['df_tw']=tw; saveAll(); renderWeights(); }
 function setSlotTwDfEqual(id,nN){ const sl=slotById(id); if(!sl) return;
   if(!sl.params) sl.params={}; delete sl.params['df_tw']; saveAll(); openSlotParams(id); renderWeights(); }
 // 3모드 슬롯 티어별 (key=sfBuy/sfSell/sfHold/sfW/mdBuy/...)
 function setSlot3(id,key,i,val,nN){ const sl=slotById(id); if(!sl)return; if(!sl.params)sl.params={};
   const pk='slot_'+key; let a=sl.params[pk]; if(Array.isArray(a))a=a.slice(); else a=Array(nN).fill(0);
   while(a.length<nN)a.push(0); if(a.length>nN)a=a.slice(0,nN);
-  a[i]=parseFloat(val)||0; sl.params[pk]=a; saveAll(); openSlotParams(id); renderWeights(); }
+  a[i]=parseFloat(val)||0; sl.params[pk]=a; saveAll(); renderWeights(); }
 // 동파 슬롯 티어 비중
 function toggleSlotTwdg(id,nN){ const sl=slotById(id); if(!sl)return; if(!sl.params)sl.params={};
   sl.params['g_twOn']=!sl.params['g_twOn'];
