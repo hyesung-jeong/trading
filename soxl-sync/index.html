@@ -190,7 +190,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v19 · MDD발동</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v20 · 리밸런싱</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -250,6 +250,15 @@
           <label class="slide-toggle"><input type="checkbox" id="slider-on" onchange="renderWeights()"> 슬라이더로 비중 조절</label>
           <div id="weights"></div>
           <div class="wsum"><span>합계</span><b id="wsumv">100%</b></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--dim)">
+            <span style="white-space:nowrap">리밸런싱</span>
+            <select id="rebalMode" onchange="setRebal()" style="flex:1;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:12px">
+              <option value="none">없음 (연초 비중 고정)</option>
+              <option value="Q">분기별 (3개월)</option>
+              <option value="H">반기별 (6개월)</option>
+              <option value="M">월별</option>
+            </select>
+          </div>
         </div>
     </div>
 
@@ -6076,6 +6085,7 @@ function applyDualSheet(res,P){
 }
 
 let CS_MODE=true, CS_SF=40;
+function setRebal(){ try{ const el=document.getElementById('rebalMode'); if(el) localStorage.setItem('cs_rebal', el.value); }catch(e){} run(); }
 function csModeToggle(on){ CS_MODE=on;
   const sfrow=document.getElementById('cs_sfrow'); if(sfrow)sfrow.style.opacity=on?'1':'0.4';
   const sf=document.getElementById('cs_sf'),sfn=document.getElementById('cs_sfn'); if(sf)sf.disabled=!on; if(sfn)sfn.disabled=!on;
@@ -6289,13 +6299,33 @@ function blendDailySlots(results, active, wsum, years){
     const y=2000+parseInt(ymd.slice(0,2));
     (ymdsByYear[y]=ymdsByYear[y]||[]).push(ymd);
   });
+  const rebalEl=document.getElementById('rebalMode');
+  const rebalMode=rebalEl?rebalEl.value:'none';
+  const wArr=active.map(s=>{ const sl=slotById(s); return (sl?sl.w:0)/wsum; });
+  function segKey(ymd){
+    const mo=parseInt(ymd.slice(2,4));
+    if(rebalMode==='M') return mo;
+    if(rebalMode==='Q') return Math.floor((mo-1)/3);
+    if(rebalMode==='H') return Math.floor((mo-1)/6);
+    return 0;
+  }
   const port={};
   (years||[]).forEach(y=>{
     const ds=(ymdsByYear[y]||[]).sort();
     if(!ds.length){ port[y]={ret:0,mdd:0,maxRet:0,minRet:0}; return; }
     let peak=null, mdd=0, lastVal=1, minVal=null;
+    let segBase=active.map((s)=>results[s].series[ds[0]]);
+    let portBase=1;
+    let curSeg=segKey(ds[0]);
     ds.forEach(ymd=>{
-      let v=0; active.forEach(s=>{ const sl=slotById(s); v += ((sl?sl.w:0)/wsum)*results[s].series[ymd]; });
+      const seg=segKey(ymd);
+      if(seg!==curSeg){
+        curSeg=seg; portBase=lastVal;
+        segBase=active.map(s=>results[s].series[ymd]);
+      }
+      let v=0;
+      active.forEach((s,i)=>{ const rel=results[s].series[ymd]/segBase[i]; v += wArr[i]*rel; });
+      v*=portBase;
       if(peak===null) peak=v;
       if(minVal===null) minVal=v;
       if(v>peak) peak=v;
@@ -7388,7 +7418,8 @@ function resetAcctParams(){
 }
 
 // 초기화: 저장된 설정 복원
-initDateRange(); loadAll(); renderWeights(); renderTw(); if(typeof renderTwdg==="function")renderTwdg(); getFeeRate(); renderWsTabs();
+initDateRange(); loadAll();
+try{ const _rb=localStorage.getItem('cs_rebal'); if(_rb){ const el=document.getElementById('rebalMode'); if(el) el.value=_rb; } }catch(e){} renderWeights(); renderTw(); if(typeof renderTwdg==="function")renderTwdg(); getFeeRate(); renderWsTabs();
 try{ const cm=localStorage.getItem('cs_mode'); if(cm){ const o=JSON.parse(cm); if(o){ CS_MODE=(o.on!==false); CS_SF=(typeof o.sf==='number')?o.sf:40; if(o.trigMode){const _tm=document.getElementById('sec_trigMode');if(_tm)_tm.value=o.trigMode;} if(o.mddThr!=null&&o.mddThr!==''){const _mt=document.getElementById('sec_mddThr');if(_mt)_mt.value=o.mddThr;} const c=document.getElementById('cs_mode'); if(c)c.checked=CS_MODE; const sf=document.getElementById('cs_sf'),sfn=document.getElementById('cs_sfn'); if(sf)sf.value=CS_SF; if(sfn)sfn.value=CS_SF; } } }catch(e){}
 csModeToggle(CS_MODE); if(typeof csTrigModeToggle==='function')csTrigModeToggle();
 // 동파·듀얼 파라미터 입력칸 변경 시 자동 재계산 (id가 d_ 또는 g_ 로 시작하는 input 전부)
