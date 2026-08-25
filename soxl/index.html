@@ -190,7 +190,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v20 · 리밸런싱</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v26 · 베이스비교</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -241,6 +241,18 @@
               <option value="H">반기별 (6개월)</option>
               <option value="M">월별</option>
             </select>
+          </div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer">
+              <input type="checkbox" id="resetOn" onchange="setReset()"> 💰 익절 리셋 (목표 수익 도달시 현금화 후 재시작)
+            </label>
+            <div id="resetRow" style="display:none;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;font-size:12px;color:var(--dim)">
+              <span>목표수익</span>
+              <input type="number" id="resetTarget" value="100" step="10" onchange="setReset()" style="width:64px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink);font-family:var(--mono);font-size:12px;text-align:right">%
+              <span style="margin-left:6px">재투입</span>
+              <input type="number" id="resetReinv" value="40" step="5" onchange="setReset()" style="width:56px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink);font-family:var(--mono);font-size:12px;text-align:right">%
+              <span style="color:var(--faint);font-size:11px">(나머지 현금)</span>
+            </div>
           </div>
         </div>
     </div>
@@ -5177,6 +5189,96 @@ function runThree(rows, P){
   const out={}; ys.forEach(y=>out[y]={ret:yearly[y][0],mdd:yearly[y][1],maxRet:yearly[y][2],minRet:yearly[y][3]});
   return {yearly:out, years:ys, series:series, tlog:tlog};
 }
+
+function runThreeSecond(rows, P, wMainFrac, wSecFrac){
+  const n=rows.length;
+  const closes=rows.map(r=>r[1]);
+  const Rs=computeAppliedWRSI(rows);
+  const years=rows.map(r=>2000+parseInt(r[0].slice(0,2)));
+  const MODES=P.settings, rsiMin=P.rsiMin, rsiMax=P.rsiMax;
+  const uFee=P.fee||0;
+  const TOTAL_SELL_FEE=0.0000278+uFee, FEE_BUY=0+uFee;
+  const totalCap=P.initCap;
+  const capMain=totalCap*wMainFrac, capSec=totalCap*wSecFrac;
+  // 세컨 발동 조건
+  const _secTrigMode=(P&&P.secTrig)?P.secTrig:'full';
+  const _secMddThr=(P&&P.secMdd!=null&&!isNaN(P.secMdd))?Math.abs(P.secMdd):15;
+  function applyMode(R){ if(isNaN(R)||R==null) return "Middle"; if(R<=rsiMin) return "SF"; if(R>=rsiMax) return "AG"; return "Middle"; }
+  function mkE(cap){ return {cash:trunc2(cap), base:trunc2(cap), inv:[], active:true}; }
+  // 한 스텝 실행 (엔진 E에 대해 i일 매매)
+  function step(E, i, active){
+    if(!active) return;
+    const close=closes[i], prevClose=i>0?closes[i-1]:close, R=Rs[i], cm=applyMode(R);
+    const tier=E.inv.length+1; const wlist=MODES[cm].weight;
+    let buyQty=0, buyTarget=0;
+    if(tier<=wlist.length){ const w=wlist[tier-1];
+      const seed=trunc2(Math.min(E.base*w,E.cash)+EPS3);
+      const bRate=tier<=MODES[cm].buy.length?MODES[cm].buy[tier-1]:MODES[cm].buy[MODES[cm].buy.length-1];
+      buyTarget=trunc2(prevClose*(1+bRate)+EPS3);
+      if(buyTarget>0) buyQty=Math.floor(seed/buyTarget);
+    }
+    let cf=0, pl=0; const newInv=[];
+    E.inv.forEach(p=>{ p.days++;
+      const pt=p.tier, pm=(p.mode in MODES)?p.mode:"Middle";
+      const sRate=pt<=MODES[pm].sell.length?MODES[pm].sell[pt-1]:MODES[pm].sell[MODES[pm].sell.length-1];
+      const sellTarget=Math.ceil(p.bp*(1+sRate)*100-EPS3)/100;
+      const hv=MODES[pm].hold; const tc=Array.isArray(hv)?(pt<=hv.length?hv[pt-1]:hv[hv.length-1]):hv;
+      if(close>=sellTarget||p.days>=tc){ const gross=p.qty*close; const net=gross-gross*TOTAL_SELL_FEE; cf+=net; pl+=net-p.cost; }
+      else newInv.push(p);
+    });
+    E.inv=newInv;
+    if(buyQty>0 && close<=buyTarget){ const gross=buyQty*close; const cost=gross+gross*FEE_BUY;
+      if(cost<=E.cash){ cf-=cost; E.inv.push({bp:close,qty:buyQty,cost:cost,mode:cm,tier:tier,days:0}); } }
+    E.cash=trunc2(E.cash+cf+EPS3);
+    const plf=trunc2(pl+EPS3);
+    if(plf>0) E.base+=plf*(MODES[cm].comp_rate||0.811);
+    else if(plf<0) E.base+=plf*(MODES[cm].loss_rate||0.291);
+    E.base=trunc2(E.base+EPS3);
+  }
+  function eAsset(E, price){ let eq=0; E.inv.forEach(p=>eq+=p.qty*price); return trunc2(E.cash+eq+EPS3); }
+  function isFullE(E, i){ const R=Rs[i]; const cm=applyMode(R); return E.inv.length>=MODES[cm].weight.length; }
+
+  const warm3=rows.map(r=>r[6]===1);
+  let startI3=0; while(startI3<n && warm3[startI3]) startI3++;
+  let curYear=years[startI3];
+  let M=mkE(capMain), S=mkE(capSec); S.active=false;
+  let yStartTotal=totalCap, peak=totalCap, ymdd=0, ymin=totalCap;
+  let mainFullPrev=false, secOn=false, _mainPeak=0;
+  const yearly={}, series={}, secStart={};
+  function resetY(){ M=mkE(capMain); S=mkE(capSec); S.active=false; secOn=false; mainFullPrev=false; _mainPeak=0; yStartTotal=totalCap; peak=totalCap; ymdd=0; ymin=totalCap; }
+
+  for(let i=startI3;i<n;i++){
+    if(warm3[i]) continue;
+    if(years[i]!==curYear){
+      const lc=closes[i-1];
+      const endAsset=eAsset(M,lc)+(secOn?eAsset(S,lc):S.cash);
+      const yr=(endAsset/yStartTotal-1)*100;
+      yearly[curYear]=[yr,-ymdd*100,(peak/yStartTotal-1)*100,(ymin/yStartTotal-1)*100];
+      resetY(); curYear=years[i];
+    }
+    step(M,i,true);
+    // 메인 자산 MDD 추적
+    const _mainNow=eAsset(M,closes[i]);
+    if(_mainNow>_mainPeak) _mainPeak=_mainNow;
+    const _mainMdd=_mainPeak>0?(_mainPeak-_mainNow)/_mainPeak*100:0;
+    const _trig=(_secTrigMode==='mdd')?(_mainMdd>=_secMddThr):mainFullPrev;
+    if(!secOn && _trig){ secOn=true; S.active=true; if(secStart[years[i]]===undefined) secStart[years[i]]=rows[i][0]; }
+    step(S,i,secOn);
+    const price=closes[i];
+    const total=eAsset(M,price)+(secOn?eAsset(S,price):S.cash);
+    if(total>peak) peak=total; if(total<ymin) ymin=total;
+    const dd=peak>0?(peak-total)/peak:0; if(dd>ymdd) ymdd=dd;
+    series[rows[i][0]]=total/yStartTotal;
+    mainFullPrev=isFullE(M,i);
+  }
+  const lc=closes[n-1];
+  const endAsset=eAsset(M,lc)+(secOn?eAsset(S,lc):S.cash);
+  yearly[curYear]=[(endAsset/yStartTotal-1)*100,-ymdd*100,(peak/yStartTotal-1)*100,(ymin/yStartTotal-1)*100];
+  const ys=Object.keys(yearly).map(Number).sort((a,b)=>a-b);
+  const out={}; ys.forEach(y=>out[y]={ret:yearly[y][0],mdd:yearly[y][1],maxRet:yearly[y][2],minRet:yearly[y][3]});
+  return {yearly:out, years:ys, series:series, tlog:[], secStart:secStart};
+}
+
 // 직전 완료 주의 wRSI를 각 거래일에 적용 (월요일 기준 searchsorted)
 function computeAppliedWRSI(rows){
   // 주간 RSI: wRSI(인덱스4)가 null아닌 행 = 주 마지막 거래일
@@ -5286,7 +5388,9 @@ function runSlotEngine(slot){
       if(slot.sec){ dp.secTrig=slot.secTrig||'full'; dp.secMdd=(slot.secMdd!==undefined?slot.secMdd:15); const sw=(slot.secW!==undefined?slot.secW:50)/100; return runDongpaSecond(DATA,dp,1-sw,sw); }
       return runDongpa(DATA,dp); }
     if(slot.type==='dropf') return runDropf(DATA,dropfP());
-    if(slot.type==='three') return runThree(DATA,threeP());
+    if(slot.type==='three'){ const tp=threeP();
+      if(slot.sec){ tp.secTrig=slot.secTrig||'full'; tp.secMdd=(slot.secMdd!==undefined?slot.secMdd:15); const sw=(slot.secW!==undefined?slot.secW:50)/100; return runThreeSecond(DATA,tp,1-sw,sw); }
+      return runThree(DATA,tp); }
     return null;
   });
 }
@@ -5303,14 +5407,14 @@ function gi(id){return parseInt(gv(id));}
 function activeSlots(){ return SLOTS.filter(s=>s.on); }
 function toggleStrat(id){ const sl=slotById(id); if(!sl) return; sl.on=!sl.on;
   rebalanceWeights(); renderWeights(); run(); }
-function toggleSecond(id){ const sl=slotById(id); if(!sl||(sl.type!=='dongpa'&&sl.type!=='dual')) return;
+function toggleSecond(id){ const sl=slotById(id); if(!sl||(sl.type!=='dongpa'&&sl.type!=='dual'&&sl.type!=='three')) return;
   sl.sec=!sl.sec; if(sl.sec && sl.secW===undefined) sl.secW=50; saveAll(); renderWeights(); run(); }
 function secTrigModeToggle(){
   const el=document.getElementById('sec_trigMode'), row=document.getElementById('sec_mddrow');
   if(el&&row) row.style.display=(el.value==='mdd')?'flex':'none';
   try{ saveAll&&saveAll(); }catch(e){}
 }
-function setSecW(id,v,from){ const sl=slotById(id); if(!sl) return; let w=parseFloat(v)||0; if(w<0)w=0; if(w>90)w=90; sl.secW=w;
+function setSecW(id,v,from){ const sl=slotById(id); if(!sl) return; let w=parseFloat(v)||0; if(w<0)w=0; if(w>100)w=100; sl.secW=w;
   // 슬라이더/숫자 상호 동기화 (지금 조작 중인 칸은 건드리지 않음)
   const rng=document.getElementById('secrng-'+id); const num=document.getElementById('secnum-'+id); const lbl=document.getElementById('seclbl-'+id);
   if(rng && from!=='range') rng.value=w;
@@ -5319,6 +5423,14 @@ function setSecW(id,v,from){ const sl=slotById(id); if(!sl) return; let w=parseF
   saveAll(); run(); }
 function setSecTrig(id,val){ const sl=slotById(id); if(!sl)return; sl.secTrig=val; saveAll(); renderWeights(); run(); }
 function setRebal(){ try{ const el=document.getElementById('rebalMode'); if(el) localStorage.setItem('soxl_rebal', el.value); }catch(e){} run(); }
+function setReset(){
+  const on=document.getElementById('resetOn'), row=document.getElementById('resetRow');
+  if(on&&row) row.style.display=on.checked?'flex':'none';
+  try{ localStorage.setItem('soxl_reset', JSON.stringify({on:on?on.checked:false,
+    tgt:(document.getElementById('resetTarget')||{}).value,
+    reinv:(document.getElementById('resetReinv')||{}).value})); }catch(e){}
+  run();
+}
 function setSecMdd(id,v){ const sl=slotById(id); if(!sl)return; const x=parseFloat(v); if(!isNaN(x)&&x>0&&x<100){ sl.secMdd=x; saveAll(); run(); } }
 function rebalanceWeights(){ // 켜진 슬롯 균등 분배
   const on=activeSlots(); const cnt=on.length;
@@ -5351,12 +5463,12 @@ function renderWeights(){
       <span class="dot ${cls}"></span>
       <input value="${s.name}" onchange="renameSlot('${s.id}',this.value)" style="flex:1;min-width:28px;width:28px;border:none;background:transparent;color:var(--ink);font-weight:600;font-size:13px;padding:2px 1px">
       ${(function(){ let pl=slotPresetLabel(s); if(pl) pl=pl.replace("(세컨동시)",""); return pl?`<span onclick="openSlotParams('${s.id}')" title="적용된 프리셋 (* = 값 수정됨)" style="font-size:10px;padding:2px 5px;border-radius:9px;background:#eef4ff;color:#3b6fd4;border:1px solid #c9daf5;cursor:pointer;white-space:nowrap;flex-shrink:0">${pl}</span>`:''; })()}
-      ${(s.type==='dongpa'||s.type==='dual')?`<button onclick="toggleSecond('${s.id}')" title="세컨: 메인이 풀티어된 다음날부터 추가 진입" style="border:1px solid ${s.sec?'var(--accent2)':'var(--line)'};background:${s.sec?'var(--accent2)':'var(--panel)'};color:${s.sec?'#fff':'var(--dim)'};cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">세컨${s.sec?' ✓':''}</button>`:''}
+      ${(s.type==='dongpa'||s.type==='dual'||s.type==='three')?`<button onclick="toggleSecond('${s.id}')" title="세컨: 메인이 풀티어된 다음날부터 추가 진입" style="border:1px solid ${s.sec?'var(--accent2)':'var(--line)'};background:${s.sec?'var(--accent2)':'var(--panel)'};color:${s.sec?'#fff':'var(--dim)'};cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">세컨${s.sec?' ✓':''}</button>`:''}
       ${s.type!=='cash'?`<button onclick="openSlotParams('${s.id}')" style="border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">파라미터</button>`:''}
       <button onclick="removeSlot('${s.id}')" style="border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;padding:0 2px;flex-shrink:0" title="삭제">×</button>
     </div>${(s.type==='dongpa'||s.type==='dual')&&s.sec?`<div style="display:flex;align-items:center;gap:8px;padding:4px 10px 8px 34px;font-size:11px;color:var(--dim)"><span style="white-space:nowrap">세컨 비중</span>`+
-      `<input type="range" min="0" max="90" step="1" value="${s.secW!==undefined?s.secW:50}" id="secrng-${s.id}" oninput="setSecW('${s.id}',this.value,'range')" style="flex:1;min-width:70px">`+
-      `<input type="number" min="0" max="90" value="${s.secW!==undefined?s.secW:50}" id="secnum-${s.id}" onchange="setSecW('${s.id}',this.value,'num')" onfocus="this.select()" style="width:48px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 5px;border-radius:4px">%`+
+      `<input type="range" min="0" max="100" step="1" value="${s.secW!==undefined?s.secW:50}" id="secrng-${s.id}" oninput="setSecW('${s.id}',this.value,'range')" style="flex:1;min-width:70px">`+
+      `<input type="number" min="0" max="100" value="${s.secW!==undefined?s.secW:50}" id="secnum-${s.id}" onchange="setSecW('${s.id}',this.value,'num')" onfocus="this.select()" style="width:48px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 5px;border-radius:4px">%`+
       `<span style="color:var(--faint);white-space:nowrap" id="seclbl-${s.id}">(메인 ${100-(s.secW!==undefined?s.secW:50)} / 세컨 ${s.secW!==undefined?s.secW:50})</span></div>`+
       `<div style="display:flex;align-items:center;gap:6px;padding:0 10px 8px 34px;font-size:11px;color:var(--dim);flex-wrap:wrap">`+
       `<span style="white-space:nowrap">발동</span>`+
@@ -5652,8 +5764,19 @@ function showYearChart(year){
   const ymds=Object.keys(base).filter(ymd=>{ if(2000+parseInt(ymd.slice(0,2))!==year) return false;
     return active.every(s=>results[s].series[ymd]!==undefined); }).sort();
   if(!ymds.length){ alert(year+'년 데이터가 없습니다.'); return; }
+  // 리셋 설정 반영 (연도별 성과와 동일 로직)
+  const _rsEl=document.getElementById('resetOn');
+  const _resetOn=_rsEl?_rsEl.checked:false;
+  const _rsT=document.getElementById('resetTarget'), _rsR=document.getElementById('resetReinv');
+  const _rsTarget=1+((_rsT?parseFloat(_rsT.value):100)||100)/100;
+  const _rsReinv=((_rsR?parseFloat(_rsR.value):40)||40)/100;
+  let _rsCash=0,_rsInv=1,_rsBaseV=null;
   const pts=ymds.map(ymd=>{ let v=0; active.forEach(s=>{ const sl=slotById(s); v+=((sl?sl.w:0)/wsum)*results[s].series[ymd]; });
-    return {ymd, val:(v-1)*100}; }); // 연초대비 %
+    let actual;
+    if(_resetOn){ if(_rsBaseV===null)_rsBaseV=v; const rel=v/_rsBaseV; actual=_rsCash+_rsInv*rel;
+      if(rel>=_rsTarget){ _rsCash=actual*(1-_rsReinv); _rsInv=actual*_rsReinv; _rsBaseV=null; } }
+    else actual=v;
+    return {ymd, val:(actual-1)*100}; }); // 연초대비 % (현금포함)
   // 차트 (SVG)
   const W=520,H=300,padL=46,padR=16,padT=20,padB=36;
   const vals=pts.map(p=>p.val); let mn=Math.min(...vals,0), mx=Math.max(...vals,0);
@@ -5973,6 +6096,10 @@ function run(){
   updatePeriodLabel();
   const results={};   // key = slot.id
   SLOTS.forEach(slot=>{ if(slot.on){ const r=runSlotEngine(slot); if(r) results[slot.id]=r; } });
+  // 베이스 results: 세컨 끈 상태로 각 슬롯 재실행 (상대비교용)
+  const baseResults={};
+  SLOTS.forEach(slot=>{ if(slot.on){ const _sec=slot.sec; slot.sec=false; const r=runSlotEngine(slot); slot.sec=_sec; if(r) baseResults[slot.id]=r; } });
+  window._baseResults=baseResults;
   render(results);
   try{ saveAll(); }catch(e){}
 }
@@ -5987,6 +6114,8 @@ function render(results){
   let wsum=0; active.forEach(s=>wsum+=(slotById(s)?slotById(s).w:0)); if(wsum===0)wsum=1;
   // === 진짜 일별 합산: 각 슬롯 일별배수(연초=1)를 비중대로 합쳐 연도별 수익/MDD ===
   const port=blendDailySlots(results, active, wsum, years);
+  // 베이스 port: 세컨·리셋 끈 결과 (상대비교 괄호표시용)
+  const basePort=blendDailySlots(window._baseResults||{}, active, wsum, years, true);
   const rets=years.map(y=>port[y].ret), mdds=years.map(y=>port[y].mdd);
   let growth=1; rets.forEach(r=>growth*=(1+r/100));
   const cagr=(Math.pow(growth,1/rets.length)-1)*100;
@@ -6017,15 +6146,26 @@ function render(results){
     const list=secByYear[y]; if(!list||!list.length) return '<br><span style="color:var(--faint);font-size:10px">세컨 미발동</span>';
     const parts=list.map(o=>{ const nm=o.t==='dongpa'?'동파':(o.t==='dual'?'듀얼':''); return `${nm} ${o.ymd.slice(2,4)}/${o.ymd.slice(4,6)}`; });
     return `<br><span style="display:inline-block;margin-top:2px;color:#fff;background:var(--accent2);font-size:11px;font-weight:600;padding:1px 7px;border-radius:8px" title="세컨 발동일">🚀 ${parts.join(' · ')}</span>`; };
+  // 리셋 발동일 표시 (세컨과 구분: 주황 배지 💰)
+  const fmtResetY=(y)=>{ const r=port[y]; if(!r||!r.resetDays||!r.resetDays.length) return '';
+    const parts=r.resetDays.map(d=>`${d.slice(2,4)}/${d.slice(4,6)}`);
+    return `<br><span style="display:inline-block;margin-top:2px;color:#fff;background:#e8890c;font-size:11px;font-weight:600;padding:1px 7px;border-radius:8px" title="익절 리셋일">💰 ${parts.join(' · ')}</span>`; };
+  // 세컨·리셋 켜졌는지 (베이스 괄호표시 여부)
+  const _secAnyOn=active.some(s=>{ const sl=slotById(s); return sl&&sl.sec; });
+  const _resetNow=(document.getElementById('resetOn')||{}).checked;
+  const _showBase=_secAnyOn||_resetNow;
   let yb=""; years.forEach(y=>{ const r=port[y]; const c=r.mdd!==0?r.ret/Math.abs(r.mdd):0;
     const mx=(r.maxRet!==undefined?r.maxRet:r.ret);
     const mn=(r.minRet!==undefined?r.minRet:r.ret);
+    const b=basePort[y]||{}; // 베이스값
+    const bRet=(_showBase&&b.ret!==undefined)?` <span style="color:var(--faint);font-size:10px">(${b.ret>=0?'+':''}${b.ret.toFixed(1)})</span>`:'';
+    const bMdd=(_showBase&&b.mdd!==undefined)?` <span style="color:var(--faint);font-size:10px">(${b.mdd.toFixed(1)})</span>`:'';
     const uw=yearUnderwater(results, active, wsum, y);
     const uwTxt=uw.maxUw+'일'+(uw.recovered?'':'*');
-    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈${fmtSecY(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%</td>`+
+    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈${fmtSecY(y)}${fmtResetY(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%${bRet}</td>`+
       `<td class="pos">+${mx.toFixed(1)}%</td>`+
       `<td class="${mn>=0?'pos':'neg'}">${mn>=0?'+':''}${mn.toFixed(1)}%</td>`+
-      `<td class="neg">${r.mdd.toFixed(1)}%</td>`+
+      `<td class="neg">${r.mdd.toFixed(1)}%${bMdd}</td>`+
       `<td title="${uw.recovered?'연내 회복':'연말까지 미회복'}">${uwTxt}</td>`+
       `<td>${c.toFixed(2)}</td></tr>`; });
   document.getElementById("yearbody").innerHTML=yb;
@@ -6075,7 +6215,7 @@ function cumDailyMdd(results, active, wsum, years){
   return mdd;
 }
 // 슬롯 기반 일별 합산 (slot.w 사용)
-function blendDailySlots(results, active, wsum, years){
+function blendDailySlots(results, active, wsum, years, forceNoReset){
   const ymdsByYear={};
   const base=results[active[0]].series;
   Object.keys(base).forEach(ymd=>{
@@ -6094,6 +6234,12 @@ function blendDailySlots(results, active, wsum, years){
     if(rebalMode==='H') return Math.floor((mo-1)/6);
     return 0;
   }
+  // 익절 리셋 설정: 목표 수익% 도달시 현금화 후 재투입비중만 재시작
+  const rsEl=document.getElementById('resetOn');
+  const resetOn=forceNoReset?false:(rsEl?rsEl.checked:false);
+  const rsTgtEl=document.getElementById('resetTarget'), rsReinvEl=document.getElementById('resetReinv');
+  const resetTarget=1+((rsTgtEl?parseFloat(rsTgtEl.value):100)||100)/100;
+  const resetReinv=((rsReinvEl?parseFloat(rsReinvEl.value):40)||40)/100;
   const port={};
   (years||[]).forEach(y=>{
     const ds=(ymdsByYear[y]||[]).sort();
@@ -6102,6 +6248,8 @@ function blendDailySlots(results, active, wsum, years){
     let segBase=active.map((s)=>results[s].series[ds[0]]);
     let portBase=1;
     let curSeg=segKey(ds[0]);
+    // 리셋 상태: 투입중 자산의 배수기준(rsBase), 현금(rsCash), 투입금(rsInv)
+    let rsCash=0, rsInv=1, rsBaseV=null; const resetDays=[];
     ds.forEach(ymd=>{
       const seg=segKey(ymd);
       if(seg!==curSeg){
@@ -6110,15 +6258,29 @@ function blendDailySlots(results, active, wsum, years){
       }
       let v=0;
       active.forEach((s,i)=>{ const rel=results[s].series[ymd]/segBase[i]; v += wArr[i]*rel; });
-      v*=portBase;
-      if(peak===null) peak=v;
-      if(minVal===null) minVal=v;
-      if(v>peak) peak=v;
-      if(v<minVal) minVal=v;
-      const dd=(v-peak)/peak*100; if(dd<mdd) mdd=dd;
-      lastVal=v;
+      v*=portBase;  // 리밸런싱 반영된 "매매법 합산" 포트값 (연초=1)
+      let actual;   // 리셋 반영된 실제 자산
+      if(resetOn){
+        if(rsBaseV===null) rsBaseV=v;      // 이 구간 시작 v
+        const rel=v/rsBaseV;               // 구간 시작 대비 상대수익
+        actual = rsCash + rsInv*rel;       // 현금 + 투입분×상대수익
+        if(rel>=resetTarget){              // 목표 도달 → 현금화, 다음날 재투입
+          rsCash = actual*(1-resetReinv);
+          rsInv  = actual*resetReinv;
+          rsBaseV=null;                    // 다음날 새 기준
+          resetDays.push(ymd);
+        }
+      } else {
+        actual=v;
+      }
+      if(peak===null) peak=actual;
+      if(minVal===null) minVal=actual;
+      if(actual>peak) peak=actual;
+      if(actual<minVal) minVal=actual;
+      const dd=(actual-peak)/peak*100; if(dd<mdd) mdd=dd;
+      lastVal=actual;
     });
-    port[y]={ret:(lastVal-1)*100, mdd:mdd, maxRet:(peak-1)*100, minRet:(minVal-1)*100};
+    port[y]={ret:(lastVal-1)*100, mdd:mdd, maxRet:(peak-1)*100, minRet:(minVal-1)*100, resetDays:resetDays};
   });
   return port;
 }
@@ -7189,6 +7351,11 @@ function resetAcctParams(){
 // 초기화: 저장된 설정 복원
 initDateRange(); loadAll();
 try{ const _rb=localStorage.getItem('soxl_rebal'); if(_rb){ const el=document.getElementById('rebalMode'); if(el) el.value=_rb; } }catch(e){}
+try{ const _rs=localStorage.getItem('soxl_reset'); if(_rs){ const o=JSON.parse(_rs);
+  const on=document.getElementById('resetOn'); if(on)on.checked=!!o.on;
+  const t=document.getElementById('resetTarget'); if(t&&o.tgt!=null)t.value=o.tgt;
+  const rv=document.getElementById('resetReinv'); if(rv&&o.reinv!=null)rv.value=o.reinv;
+  if(typeof setReset==='function'){ const row=document.getElementById('resetRow'); if(row&&on)row.style.display=on.checked?'flex':'none'; } } }catch(e){}
  renderWeights(); renderTw(); if(typeof renderTwdg==="function")renderTwdg(); getFeeRate(); renderWsTabs();
 // 클라우드 동기화 시작 (설정돼 있으면)
 if(cloudOn() && !cloudProfile()) askCloudProfile(); else cloudInit();
