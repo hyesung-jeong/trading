@@ -80,6 +80,9 @@
   .oc-big{font-family:var(--mono);font-size:22px;font-weight:700;margin:4px 0 2px}
   .oc-none{color:var(--faint);font-size:13px;padding:6px 0}
   .holdtable{width:100%;border-collapse:collapse;font-size:13px}
+    .panel.compact table{font-size:12px}
+    .panel.compact th,.panel.compact td{padding:4px 8px}
+    .panel.compact .panel-h{padding-top:10px;padding-bottom:6px}
   .holdtable th{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--faint);text-align:right;padding:8px 10px;border-bottom:1px solid var(--line)}
   .holdtable th:first-child{text-align:left}
   .holdtable td{padding:8px 10px;text-align:right;font-family:var(--mono);border-bottom:1px solid var(--line)}
@@ -190,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v27 · 데이터0825</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v29 · 리셋한줄</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -359,22 +362,20 @@
         <div class="card"><div class="k">Calmar</div><div class="v" id="m-calmar">—</div><div class="sub">CAGR / MDD</div><div class="sub" id="m-calmar-cum" style="color:var(--accent2);margin-top:2px"></div></div>
         <div class="card"><div class="k">최악 연도</div><div class="v" id="m-worst">—</div><div class="sub" id="m-worsty"></div></div>
       </div>
-      <div class="twocol">
-        <div class="panel">
-          <div class="panel-h">연도별 성과 · 포트폴리오</div>
-          <table><thead><tr><th>연도</th><th>수익률</th><th>최고수익</th><th>최저수익</th><th>MDD</th><th title="그 해 전고점 회복까지 최장 물속 기간(거래일)">언더워터</th><th>Calmar</th></tr></thead>
-          <tbody id="yearbody"></tbody></table>
-        </div>
-        <div class="panel">
-          <div class="panel-h">전략별 요약</div>
-          <table><thead><tr><th>전략</th><th>비중</th><th>CAGR</th><th>MDD</th></tr></thead>
-          <tbody id="strbody"></tbody></table>
-        </div>
+      <div class="panel compact">
+        <div class="panel-h">연도별 성과 · 포트폴리오</div>
+        <table><thead><tr><th>연도</th><th>수익률</th><th>최고수익</th><th>최저수익</th><th>MDD</th><th title="그 해 전고점 회복까지 최장 물속 기간(거래일)">언더워터</th><th>Calmar</th></tr></thead>
+        <tbody id="yearbody"></tbody></table>
       </div>
       <div class="panel">
         <div class="panel-h">연도별 수익률</div>
         <div class="legend" id="legend"></div>
         <div class="chart"><svg id="chart" viewBox="0 0 800 250" preserveAspectRatio="none"></svg></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h">전략별 요약</div>
+        <table><thead><tr><th>전략</th><th>비중</th><th>CAGR</th><th>MDD</th></tr></thead>
+        <tbody id="strbody"></tbody></table>
       </div>
     </main>
   </div>
@@ -2023,7 +2024,7 @@ function render(results){
   // 리셋 발동일 표시 (세컨과 구분: 주황 배지 💰)
   const fmtResetY=(y)=>{ const r=port[y]; if(!r||!r.resetDays||!r.resetDays.length) return '';
     const parts=r.resetDays.map(d=>`${d.slice(2,4)}/${d.slice(4,6)}`);
-    return `<br><span style="display:inline-block;margin-top:2px;color:#fff;background:#e8890c;font-size:11px;font-weight:600;padding:1px 7px;border-radius:8px" title="익절 리셋일">💰 ${parts.join(' · ')}</span>`; };
+    return ` <span style="display:inline-block;vertical-align:middle;white-space:nowrap;color:#fff;background:#e8890c;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px" title="익절 리셋일">💰 ${parts.join(' ')}</span>`; };
   // 세컨·리셋 켜졌는지 (베이스 괄호표시 여부)
   const _secAnyOn=active.some(s=>{ const sl=slotById(s); return sl&&sl.sec; });
   const _resetNow=(document.getElementById('resetOn')||{}).checked;
@@ -2036,7 +2037,7 @@ function render(results){
     const bMdd=(_showBase&&b.mdd!==undefined)?` <span style="color:var(--faint);font-size:10px">(${b.mdd.toFixed(1)})</span>`:'';
     const uw=yearUnderwater(results, active, wsum, y);
     const uwTxt=uw.maxUw+'일'+(uw.recovered?'':'*');
-    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td>${y} 📈${fmtSecY(y)}${fmtResetY(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%${bRet}</td>`+
+    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td style="white-space:nowrap;text-align:left">${y} 📈${fmtSecY(y)}${fmtResetY(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%${bRet}</td>`+
       `<td class="pos">+${mx.toFixed(1)}%</td>`+
       `<td class="${mn>=0?'pos':'neg'}">${mn>=0?'+':''}${mn.toFixed(1)}%</td>`+
       `<td class="neg">${r.mdd.toFixed(1)}%${bMdd}</td>`+
