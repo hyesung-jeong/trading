@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v31 · 시작월선택</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트 (세컨동시)</h1><span class="ver">세컨동시 v32 · 프리셋수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1505,7 +1505,7 @@ function getPresetStore(){
   }
   Object.keys(PRESETS).forEach(t=>{ if(!o.types[t]) o.types[t]=[]; });
   // 새로 추가된 기본 프리셋을 기존 저장소에 1회 병합 (버전 올릴 때만)
-  const BUILTIN_VER=5;
+  const BUILTIN_VER=6;
   if((o.builtinVer||1)<BUILTIN_VER){
     Object.keys(PRESETS).forEach(t=>{
       (PRESETS[t]||[]).forEach((pr,i)=>{
