@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v40 · 오렌지펼침수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v42 · RSI모드정확</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -508,6 +508,47 @@ function onModeMethodChange(){
   syncModeMethodUI(true);
   save(true);
   if(typeof run==='function') run();
+}
+function rsiModeRows(rows, floorRsi, ceilRsi){
+  // QQQ_CLOSE 주간(ISO주 마지막거래일) 종가의 Cutler(SMA14) RSI → 전주기준 히스테리시스 모드, SOXL 날짜 매핑 (엑셀 RSI_3모드와 동일)
+  function wk(ymd){ const y=2000+parseInt(ymd.slice(0,2)),mo=parseInt(ymd.slice(2,4)),d=parseInt(ymd.slice(4,6)); const dt=new Date(Date.UTC(y,mo-1,d)); const day=(dt.getUTCDay()+6)%7; dt.setUTCDate(dt.getUTCDate()-day+3); const firstT=new Date(Date.UTC(dt.getUTCFullYear(),0,4)); const wn=1+Math.round(((dt-firstT)/86400000-3+((firstT.getUTCDay()+6)%7))/7); return dt.getUTCFullYear()*100+wn; }
+  // QQQ 주간 종가 (ISO주 마지막 거래일)
+  const qc=QQQ_CLOSE; const weekClose={}; const order=[];
+  for(let i=0;i<qc.length;i++){ const ymd=qc[i][0], c=qc[i][1]; const k=wk(ymd); if(!(k in weekClose)) order.push(k); weekClose[k]=c; }
+  const wc=order.map(k=>weekClose[k]);
+  // Cutler(SMA14) RSI
+  const P=14, wr=new Array(wc.length).fill(null);
+  for(let i=P;i<wc.length;i++){ let g=0,l=0; for(let k=i-P+1;k<=i;k++){ const ch=wc[k]-wc[k-1]; if(ch>0)g+=ch; else l-=ch; } const ag=g/P,al=l/P; wr[i]= al!==0 ? 100-100/(1+ag/al) : 100; }
+  // 전주기준 히스테리시스
+  const wMode=new Array(order.length).fill('Middle'); let prev='Middle';
+  for(let i=0;i<order.length;i++){ const pr = (i>0 && wr[i-1]!=null) ? wr[i-1] : (wr[i]!=null?wr[i]:50); let m=prev;
+    if(prev==='Middle'){ if(pr>ceilRsi) m='AG'; else if(pr<floorRsi) m='SF'; }
+    else if(prev==='AG'){ if(pr<=ceilRsi) m='Middle'; }
+    else if(prev==='SF'){ if(pr>=floorRsi) m='Middle'; }
+    wMode[i]=m; prev=m; }
+  const kMode={}; order.forEach((k,i)=>kMode[k]=wMode[i]);
+  // SOXL 각 날짜 → 그 주 모드 (없으면 이전 가장 가까운 주)
+  return rows.map(r=>{ let k=wk(r[0]); if(k in kMode) return kMode[k]; let best='Middle'; for(let w of order){ if(w<=k) best=kMode[w]; else break; } return best; });
+}
+function maModeRows(rows, maN, floorPct, ceilPct){
+  // QQQ_CLOSE 자체 주간(ISO주 마지막거래일)으로 이평이격→전주기준 히스테리시스 모드 산출(엑셀과 동일), SOXL 날짜에 매핑
+  const cacheKey='mamode'+maN+'_'+floorPct+'_'+ceilPct;
+  function wk(ymd){ const y=2000+parseInt(ymd.slice(0,2)),mo=parseInt(ymd.slice(2,4)),d=parseInt(ymd.slice(4,6)); const dt=new Date(Date.UTC(y,mo-1,d)); const day=(dt.getUTCDay()+6)%7; dt.setUTCDate(dt.getUTCDate()-day+3); const firstT=new Date(Date.UTC(dt.getUTCFullYear(),0,4)); const wn=1+Math.round(((dt-firstT)/86400000-3+((firstT.getUTCDay()+6)%7))/7); return dt.getUTCFullYear()*100+wn; }
+  const dev=maDeviationByYmd(maN); // QQQ ymd→일별 이격%
+  // QQQ 주간 마지막거래일 이격도 시퀀스
+  const qc=QQQ_CLOSE; const weekLast={}; const order=[];
+  for(let i=0;i<qc.length;i++){ const ymd=qc[i][0]; const dv=dev[ymd]; if(dv===undefined||dv===null) continue; const k=wk(ymd); if(!(k in weekLast)) order.push(k); weekLast[k]=dv; }
+  // 전주기준 히스테리시스 (초과/미만)
+  const F=floorPct, C=ceilPct; const weekMode={}; let prev='Middle';
+  order.forEach((k,idx)=>{ const pdev = idx>0 ? weekLast[order[idx-1]] : weekLast[k]; let m=prev;
+    if(prev==='Middle'){ if(pdev>C) m='AG'; else if(pdev<F) m='SF'; }
+    else if(prev==='AG'){ if(pdev<=C) m='Middle'; }
+    else if(prev==='SF'){ if(pdev>=F) m='Middle'; }
+    weekMode[k]=m; prev=m; });
+  // SOXL 각 날짜 → 그 주의 모드 (그 주 weekMode 없으면 직전 주)
+  const sortedWeeks=order.slice();
+  return rows.map(r=>{ let k=wk(r[0]); if(k in weekMode) return weekMode[k]; // 없으면 그 이전 가장 가까운 주
+    let best='Middle'; for(let w of sortedWeeks){ if(w<=k) best=weekMode[w]; else break; } return best; });
 }
 function maDevRows(rows, maN){  // rows 각 행(ymd)에 대응하는 QQQ 이평 이격% 배열
   const dev=maDeviationByYmd(maN);
@@ -1041,7 +1082,7 @@ function runThree(rows, P){
   const n=rows.length;
   const closes=rows.map(r=>r[1]);
   const dailyRsi=rows.map(r=>r[3]);
-  const Rs=(P.modeMethod==='ma') ? maDevRows(rows, P.maN||120) : computeAppliedWRSI(rows); // 이평선 이격도 또는 직전완료주 wRSI
+  const Rs=(P.modeMethod==='ma') ? maModeRows(rows, P.maN||120, P.rsiMin, P.rsiMax) : rsiModeRows(rows, P.rsiMin, P.rsiMax); // 이평선/RSI 히스테리시스 모드
   const years=rows.map(r=>fyOf(r[0]));
   const MODES=P.settings, rsiMin=P.rsiMin, rsiMax=P.rsiMax;
   const FEE=0.0000278, initCash=P.initCap;
@@ -1056,7 +1097,7 @@ function runThree(rows, P){
   let curYear=years[startI3]; let yStart=running;
   const yearly={};
   const series={};
-  function applyMode(R){ if(isNaN(R)||R==null) return "Middle";
+  function applyMode(R){ if(R==="SF"||R==="Middle"||R==="AG") return R; if(isNaN(R)||R==null) return "Middle";
     if(R<=rsiMin) return "SF"; if(R>=rsiMax) return "AG"; return "Middle"; }
 
   for(let i=startI3;i<n;i++){
@@ -1124,7 +1165,7 @@ function runThree(rows, P){
 function runThreeSecond(rows, P, wMainFrac, wSecFrac){
   const n=rows.length;
   const closes=rows.map(r=>r[1]);
-  const Rs=(P.modeMethod==='ma') ? maDevRows(rows, P.maN||120) : computeAppliedWRSI(rows);
+  const Rs=(P.modeMethod==='ma') ? maModeRows(rows, P.maN||120, P.rsiMin, P.rsiMax) : rsiModeRows(rows, P.rsiMin, P.rsiMax);
   const years=rows.map(r=>fyOf(r[0]));
   const MODES=P.settings, rsiMin=P.rsiMin, rsiMax=P.rsiMax;
   const uFee=P.fee||0;
@@ -1134,7 +1175,7 @@ function runThreeSecond(rows, P, wMainFrac, wSecFrac){
   // 세컨 발동 조건
   const _secTrigMode=(P&&P.secTrig)?P.secTrig:'full';
   const _secMddThr=(P&&P.secMdd!=null&&!isNaN(P.secMdd))?Math.abs(P.secMdd):15;
-  function applyMode(R){ if(isNaN(R)||R==null) return "Middle"; if(R<=rsiMin) return "SF"; if(R>=rsiMax) return "AG"; return "Middle"; }
+  function applyMode(R){ if(R==="SF"||R==="Middle"||R==="AG") return R; if(isNaN(R)||R==null) return "Middle"; if(R<=rsiMin) return "SF"; if(R>=rsiMax) return "AG"; return "Middle"; }
   function mkE(cap){ return {cash:trunc2(cap), base:trunc2(cap), inv:[], active:true}; }
   // 한 스텝 실행 (엔진 E에 대해 i일 매매)
   function step(E, i, active){
@@ -2867,7 +2908,7 @@ function tradeThree(startYmd, cap){
   const sl=sliceFromStart(startYmd); if(!sl) return null;
   // 인덱스 매핑: allRows == DATA 순서 동일
   let cash=cap, base=cap; let inv=[]; let prevCloseGlobal=sl.prevClose||DATA[sl.si][1];
-  function applyMode(R){ if(isNaN(R)||R==null) return "Middle"; if(R<=rsiMin) return "SF"; if(R>=rsiMax) return "AG"; return "Middle"; }
+  function applyMode(R){ if(R==="SF"||R==="Middle"||R==="AG") return R; if(isNaN(R)||R==null) return "Middle"; if(R<=rsiMin) return "SF"; if(R>=rsiMax) return "AG"; return "Middle"; }
   let lastClose=0, lastR=NaN, lastIdx=-1;
   let dayCount=0;
   for(let i=sl.si;i<DATA.length;i++){
