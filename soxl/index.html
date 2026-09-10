@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v42 · RSI모드정확</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v43 · 프리셋동기화</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -2655,19 +2655,32 @@ async function cloudInit(){
       if(row.data.__bundle){ cloudAt=row.data.savedAt||0; cloudActive=row.data.active; cloudSets=row.data.sets; cloudPresets=row.data.presets; }
       else { cloudAt=row.data.savedAt||new Date(row.updated_at).getTime(); cloudActive=row.data; } // 구버전 호환
     }
+    // ── 프리셋은 항상 병합(기기간 사용자 프리셋 유실 방지): 로컬+클라우드 사용자프리셋(id 'u*') 합집합 ──
+    if(cloudPresets && cloudPresets.types){
+      const localPS=getPresetStore();
+      let merged=false;
+      Object.keys(cloudPresets.types).forEach(t=>{
+        localPS.types[t]=localPS.types[t]||[];
+        (cloudPresets.types[t]||[]).forEach(cp=>{
+          if(!localPS.types[t].some(lp=>lp.id===cp.id)){ localPS.types[t].push(cp); merged=true; }
+        });
+      });
+      if(merged && ls){ localPS.savedAt=Date.now(); ls.setItem(LS_PRESETS, JSON.stringify(localPS)); }
+    }
     if(row && cloudAt>localAt){
-      // 클라우드가 최신 → 로컬에 반영 후 화면 갱신
+      // 클라우드가 최신 → active/sets 반영 (프리셋은 위에서 병합됨)
       if(ls&&cloudActive) ls.setItem(LS_KEY, JSON.stringify(cloudActive));
       if(ls&&cloudSets) ls.setItem(LS_SETS, JSON.stringify(cloudSets));
-      if(ls&&cloudPresets) ls.setItem(LS_PRESETS, JSON.stringify(cloudPresets));
       loadAll(); renderWeights(); renderTw(); getFeeRate(); renderWsTabs(); run();
       _initDone=true;
+      await cloudPush(); // 병합된 프리셋 다시 업로드해 양쪽 일치
       setSyncStatus('☁ 동기화됨 ('+cloudProfile()+')','#2e7d32');
     }else if(localRaw && localAt>cloudAt){
       _initDone=true;
-      await cloudPush(); // 로컬이 최신 → 업로드
+      await cloudPush(); // 로컬이 최신 → 업로드 (병합 프리셋 포함)
     }else{
       _initDone=true;
+      await cloudPush(); // 프리셋 병합분 반영 위해 업로드
       setSyncStatus('☁ 동기화됨 ('+cloudProfile()+')','#2e7d32');
     }
   }catch(e){ _initDone=true; setSyncStatus('☁ 오프라인(로컬만 저장)','#c62828'); }
