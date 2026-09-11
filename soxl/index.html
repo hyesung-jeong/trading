@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v45 · 전체동기화수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v47 · 전체저장버튼</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1278,13 +1278,13 @@ function mondayNum(yymmdd){
 const STRAT_TYPES={dongpa:{name:"동파",cls:"g"}, dropf:{name:"떨프",cls:"g"}, three:{name:"3모드",cls:"t"}, dual:{name:"듀얼",cls:"d"}, cash:{name:"현금",cls:"c"}};
 const MAX_PER_TYPE=3;
 let _slotSeq=0;
-function newSlotId(){ return 's'+(++_slotSeq); }
+function newSlotId(){ return 's'+(++_slotSeq)+'_'+Date.now().toString(36).slice(-4)+Math.random().toString(36).slice(2,5); }
 // 기본 슬롯: 동파1, 3모드1, 듀얼1 (기존과 동일 동작)
 let SLOTS=[
-  {id:newSlotId(), type:'dongpa', name:'동파1', on:true, w:34, params:{}},
-  {id:newSlotId(), type:'three',  name:'3모드1', on:true, w:33, params:{}},
-  {id:newSlotId(), type:'dual',   name:'듀얼1', on:true, w:33, params:{}}
-];
+  {id:'s1', type:'dongpa', name:'동파1', on:true, w:34, params:{}},
+  {id:'s2', type:'three',  name:'3모드1', on:true, w:33, params:{}},
+  {id:'s3', type:'dual',   name:'듀얼1', on:true, w:33, params:{}}
+]; _slotSeq=3; // 기본 슬롯은 모든 기기에서 고정 id (동기화 병합·삭제기록 매칭용)
 function slotById(id){ return SLOTS.find(s=>s.id===id); }
 function countType(type){ return SLOTS.filter(s=>s.type===type).length; }
 function nextTypeName(type){ // 동파2, 동파3...
@@ -1418,7 +1418,7 @@ function addSlot(type){
 function removeSlot(id){
   const i=SLOTS.findIndex(s=>s.id===id); if(i<0) return;
   if(SLOTS.length<=1){ alert('슬롯은 최소 1개 필요합니다.'); return; }
-  SLOTS.splice(i,1); rebalanceWeights(); renderWeights(); run();
+  DELETED_SLOTS.push(id); SLOTS.splice(i,1); rebalanceWeights(); renderWeights(); run();
 }
 function renderWeights(){
   const on=activeSlots();
@@ -1584,6 +1584,7 @@ function presetDelete(slotId, presetId){
   const pr=list.find(p=>p.id===presetId); if(!pr) return;
   if(!confirm(`'${pr.name}' 프리셋을 삭제할까요?`)) return;
   o.types[sl.type]=list.filter(p=>p.id!==presetId);
+  o.deleted=(Array.isArray(o.deleted)?o.deleted:[]).concat([presetId]).slice(-200);
   putPresetStore(o); openSlotParams(slotId); renderWeights();
 }
 // 슬롯 카드용: 적용된 프리셋 이름 (값이 바뀌었으면 * 표시)
@@ -2590,12 +2591,13 @@ function wsDelete(){
   const o=getWs(); if(o.sets.length<=1){ alert('마지막 설정은 삭제할 수 없습니다.'); return; }
   const t=o.sets.find(s=>s.id===o.cur); if(!t) return;
   if(!confirm(`'${t.name}' 설정을 삭제할까요?`)) return;
+  o.deleted=(Array.isArray(o.deleted)?o.deleted:[]).concat([o.cur]).slice(-200);
   o.sets=o.sets.filter(s=>s.id!==o.cur);
   o.cur=o.sets[0].id; putWs(o);
   wsApply(o.sets[0].data);
 }
 function getSets(){ return getWs(); } // 클라우드 번들 호환용
-let _cloudTimer=null, _cloudBusy=false, _initDone=false; // _initDone: 초기 로딩 완료 후에만 클라우드 푸시
+let _cloudTimer=null, _cloudBusy=false, _initDone=false, _applying=false; let DELETED_SLOTS=[]; // _initDone: 초기 로딩 완료 후에만 클라우드 푸시
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_ANON_KEY); }
 function cloudProfile(){ const ls=safeLS(); return ls?(ls.getItem(CLOUD_PROFILE_KEY)||''):''; }
 function setCloudProfile(code){ const ls=safeLS(); if(ls&&code) ls.setItem(CLOUD_PROFILE_KEY, code); }
@@ -2619,24 +2621,132 @@ async function cloudFetch(){
   return rows.length?rows[0]:null;
 }
 async function cloudPush(){
-  const prof=cloudProfile(); if(!cloudOn()||!prof||!_initDone) return;
-  const ls=safeLS(); if(!ls) return;
-  const raw=ls.getItem(LS_KEY); if(!raw) return;
-  if(_cloudBusy) { cloudSchedulePush(); return; }
-  _cloudBusy=true; setSyncStatus('저장중…','#b07d0a');
+  const prof=cloudProfile(); if(!cloudOn()||!prof||!_initDone) return false;
+  const ls=safeLS(); if(!ls) return false;
+  if(_cloudBusy) { cloudSchedulePush(); return false; }
+  _cloudBusy=true; setSyncStatus('☁ 저장중…','#b07d0a');
+  let ok=false;
   try{
-    const active=JSON.parse(raw); const sets=getSets(); const presets=getPresetStore();
-    const bundle={__bundle:1, savedAt:Math.max(active.savedAt||0, sets.savedAt||0, presets.savedAt||0), active, sets, presets};
+    let row=null; try{ row=await cloudFetch(); }catch(e){ row=null; }
+    const m=mergeWithCloud(row);           // 로컬+클라우드 합집합 → 로컬에 기록
+    const b=m.bundle;
+    const bundle={__bundle:1, savedAt:Math.max(b.active&&b.active.savedAt||0, b.sets&&b.sets.savedAt||0, b.presets&&b.presets.savedAt||0), active:b.active, sets:b.sets, presets:b.presets, snapshotAt:(b.snapshotAt||localSnapAt())};
     const res=await fetch(`${SUPABASE_URL}/rest/v1/configs`,{
       method:'POST',
       headers:{...cloudHeaders(),'Prefer':'resolution=merge-duplicates'},
       body:JSON.stringify([{id:prof, data:bundle, updated_at:new Date().toISOString()}])
     });
-    if(!res.ok) throw new Error('push '+res.status);
-    setSyncStatus('☁ 동기화됨 ('+prof+')','#2e7d32');
-  }catch(e){ setSyncStatus('☁ 오프라인(로컬만 저장)','#c62828'); }
+    if(!res.ok){ let t=''; try{ t=await res.text(); }catch(e){} throw new Error('업로드 실패 '+res.status+' '+t.slice(0,80)); }
+    if(m.changedLocal) applyLocalToUI();  // 클라우드에 새로운 게 있었으면 화면 갱신
+    setSyncStatus('☁ 동기화됨 ('+prof+')','#2e7d32'); ok=true;
+  }catch(e){ setSyncStatus('☁ 오프라인: '+(e&&e.message?e.message:e),'#c62828'); }
+  _cloudBusy=false; return ok;
+}
+// ── ☁ 전체 저장: 현재 상태(파라미터·프리셋·매매법 설정)를 최종본으로 확정. 다른 기기는 새로고침/30초내 이걸 그대로 받음 ──
+async function cloudSaveAll(){
+  const prof=cloudProfile(); if(!cloudOn()||!prof){ alert('동기화 코드(hs1 등)를 먼저 설정하세요.'); return; }
+  setSyncStatus('☁ 전체 저장중…','#b07d0a');
+  for(let i=0;i<80 && _cloudBusy;i++) await new Promise(r=>setTimeout(r,100)); // 진행중 업로드 끝날 때까지 대기(최대 8초)
+  if(_cloudBusy){ alert('동기화가 오래 걸리고 있습니다. 잠시 후 다시 눌러주세요.'); return; }
+  _cloudBusy=true;
+  try{
+    saveAll();                                   // 화면의 현재 값을 로컬에 먼저 반영
+    if(_cloudTimer){ clearTimeout(_cloudTimer); _cloudTimer=null; } // 예약된 자동업로드 취소(스냅샷이 최종)
+    const b=readLocalBundle(); const t=Date.now();
+    const bundle={__bundle:1, savedAt:t, snapshotAt:t, active:b.active, sets:b.sets, presets:b.presets};
+    if(bundle.active) bundle.active.savedAt=t;
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/configs`,{ method:'POST', headers:{...cloudHeaders(),'Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify([{id:prof, data:bundle, updated_at:new Date().toISOString()}]) });
+    if(!res.ok){ let tx=''; try{ tx=await res.text(); }catch(e){} throw new Error('업로드 실패 '+res.status+' '+tx.slice(0,80)); }
+    setLocalSnapAt(t); writeLocalBundle({active:bundle.active, sets:b.sets, presets:b.presets});
+    const hh=new Date(t); const hm=hh.getHours()+':'+String(hh.getMinutes()).padStart(2,'0');
+    setSyncStatus('☁ 전체 저장됨 '+hm+' ('+prof+')','#1565c0');
+    alert('전체 저장 완료. 다른 기기에서 새로고침하면 이 설정이 그대로 나옵니다.');
+  }catch(e){ setSyncStatus('☁ 전체 저장 실패: '+(e&&e.message?e.message:e),'#c62828'); alert('전체 저장 실패: '+(e&&e.message?e.message:e)); }
   _cloudBusy=false;
 }
+// ── 병합 유틸 ──
+function readLocalBundle(){ const ls=safeLS(); let active=null; try{ active=JSON.parse(ls.getItem(LS_KEY)); }catch(e){} return {active, sets:getSets(), presets:getPresetStore()}; }
+function writeLocalBundle(b){ const ls=safeLS(); if(!ls) return; try{ if(b.active) ls.setItem(LS_KEY, JSON.stringify(b.active)); if(b.sets) ls.setItem(LS_SETS, JSON.stringify(b.sets)); if(b.presets) ls.setItem(LS_PRESETS, JSON.stringify(b.presets)); }catch(e){} }
+function bundleFromRow(row){ if(!row||!row.data) return null; const d=row.data; if(d.__bundle) return {active:d.active||null, sets:d.sets||null, presets:d.presets||null, snapshotAt:d.snapshotAt||0}; return {active:d, sets:null, presets:null, snapshotAt:0}; }
+const LS_SNAP='soxl_snapshot_at';
+function localSnapAt(){ const ls=safeLS(); const v=ls?parseInt(ls.getItem(LS_SNAP)||'0'):0; return isNaN(v)?0:v; }
+function setLocalSnapAt(t){ const ls=safeLS(); if(ls) try{ ls.setItem(LS_SNAP, String(t)); }catch(e){} }
+function _sig(b){ return JSON.stringify([b.active&&b.active.slots, b.active&&b.active.savedAt, b.sets&&b.sets.sets&&b.sets.sets.map(s=>[s.id,s.savedAt]), b.presets&&b.presets.types]); }
+function mergeWithCloud(row){
+  const L=readLocalBundle(); const C=bundleFromRow(row);
+  if(!C){ L.snapshotAt=localSnapAt(); return {bundle:L, changedLocal:false, cloudMissing:true}; }
+  // '☁ 전체 저장'으로 확정된 최종본이 클라우드에 더 새로 있으면 → 로컬 버리고 그대로 받음
+  if((C.snapshotAt||0) > localSnapAt()){
+    const S={active:C.active, sets:C.sets, presets:C.presets, snapshotAt:C.snapshotAt};
+    writeLocalBundle(S); setLocalSnapAt(C.snapshotAt);
+    return {bundle:S, changedLocal:true, cloudMissing:false, snapshot:true};
+  }
+  const M=mergeBundles(L,C); M.snapshotAt=Math.max(C.snapshotAt||0, localSnapAt());
+  const changedLocal=_sig(L)!==_sig(M);
+  const cloudMissing=_sig(C)!==_sig(M);
+  if(changedLocal) writeLocalBundle(M);
+  return {bundle:M, changedLocal, cloudMissing};
+}
+function _tomb(o,key){ return (o&&Array.isArray(o[key]))?o[key]:[]; }
+function mergeBundles(L,C){
+  const la=L&&L.active||null, ca=C&&C.active||null, lsets=L&&L.sets||null, csets=C&&C.sets||null, lp=L&&L.presets||null, cp=C&&C.presets||null;
+  // presets: 타입별 id 합집합 (삭제기록 제외)
+  const delP=[...new Set([..._tomb(lp,'deleted'),..._tomb(cp,'deleted')])];
+  const presets={builtinVer:Math.max(lp&&lp.builtinVer||0, cp&&cp.builtinVer||0), savedAt:Math.max(lp&&lp.savedAt||0, cp&&cp.savedAt||0), types:{}, deleted:delP};
+  const types=new Set([...Object.keys(lp&&lp.types||{}),...Object.keys(cp&&cp.types||{})]);
+  types.forEach(t=>{ const out=[], seen=new Set();
+    (lp&&lp.types&&lp.types[t]||[]).forEach(p=>{ if(delP.includes(p.id)) return; out.push(p); seen.add(p.id); });
+    (cp&&cp.types&&cp.types[t]||[]).forEach(p=>{ if(delP.includes(p.id)||seen.has(p.id)) return; out.push(p); seen.add(p.id); });
+    presets.types[t]=out; });
+  // active: 최신 것을 기본으로, 슬롯은 합집합(같은 id+타입+이름=같은 슬롯, id충돌시 재번호)
+  const lAt=la&&la.savedAt||0, cAt=ca&&ca.savedAt||0;
+  const base=(!la)?ca:(!ca)?la:(cAt>lAt?ca:la); const other=(base===la)?ca:la;
+  let active=base?JSON.parse(JSON.stringify(base)):null;
+  if(active){
+    const delS=[...new Set([..._tomb(la,'deletedSlots'),..._tomb(ca,'deletedSlots')])];
+    active.deletedSlots=delS;
+    const slots=(active.slots||[]).filter(s=>!delS.includes(s.id));
+    let maxN=0; slots.forEach(s=>{ const n=parseInt(String(s.id).replace('s',''))||0; if(n>maxN) maxN=n; }); delS.forEach(id=>{ const n=parseInt(String(id).replace('s',''))||0; if(n>maxN) maxN=n; });
+    (other&&other.slots||[]).forEach(s=>{ if(delS.includes(s.id)) return;
+      if(slots.some(x=>x.id===s.id)) return;               // 같은 id = 같은 슬롯 (이름만 바뀐 것도 동일, 최신 쪽 유지)
+      if(slots.some(x=>x.type===s.type&&x.name===s.name)) return; // 타입+이름 같으면 동일 취급
+      slots.push(JSON.parse(JSON.stringify(s))); });
+    active.slots=slots;
+  }
+  // sets(설정 탭): id 합집합, 같은 id는 최신, 삭제기록 제외
+  let sets=null;
+  if(lsets||csets){
+    const delW=[...new Set([..._tomb(lsets,'deleted'),..._tomb(csets,'deleted')])]; const map=new Map();
+    [(lsets&&lsets.sets)||[],(csets&&csets.sets)||[]].forEach(arr=>arr.forEach(s=>{ if(delW.includes(s.id)) return; const ex=map.get(s.id); if(!ex||(s.savedAt||0)>(ex.savedAt||0)) map.set(s.id,s); }));
+    const lcur=lsets&&lsets.cur, ccur=csets&&csets.cur;
+    sets={cur:(lcur&&map.has(lcur))?lcur:((ccur&&map.has(ccur))?ccur:(map.size?[...map.keys()][0]:'w1')), sets:[...map.values()], savedAt:Math.max(lsets&&lsets.savedAt||0, csets&&csets.savedAt||0), deleted:delW};
+    if(!sets.sets.length){ sets.sets=[{id:'w1',name:'설정1',data:active||{},savedAt:0}]; sets.cur='w1'; }
+  }
+  return {active, sets, presets};
+}
+function applyLocalToUI(){
+  _applying=true;
+  try{ loadAll(); renderWeights(); renderTw(); getFeeRate(); renderWsTabs(); run();
+    if(window._openSlotId && typeof openSlotParams==='function'){ try{ openSlotParams(window._openSlotId); }catch(e){} }
+  }catch(e){}
+  _applying=false;
+}
+async function cloudPullApply(){
+  const prof=cloudProfile(); if(!cloudOn()||!prof||!_initDone||_cloudBusy) return;
+  _cloudBusy=true;
+  try{ const row=await cloudFetch(); const m=mergeWithCloud(row);
+    if(m.changedLocal) applyLocalToUI();
+    _cloudBusy=false;
+    if(m.snapshot) setSyncStatus('☁ 최종본 받음 ('+prof+')','#1565c0');
+    if(m.cloudMissing) cloudSchedulePush();   // 클라우드에 없는 로컬 항목이 있으면 올려서 양쪽 일치
+    return;
+  }catch(e){}
+  _cloudBusy=false;
+}
+// 30초마다 + 화면 다시 볼 때 클라우드 변경 반영 (다른 기기에서 저장한 것)
+setInterval(()=>{ try{ cloudPullApply(); }catch(e){} }, 30000);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ try{ cloudPullApply(); }catch(e){} } });
 function cloudSchedulePush(){
   if(!cloudOn()||!cloudProfile()) return;
   if(_cloudTimer) clearTimeout(_cloudTimer);
@@ -2644,51 +2754,15 @@ function cloudSchedulePush(){
 }
 async function cloudInit(){
   if(!cloudOn()){ setSyncStatus('',''); _initDone=true; return; }
-  if(!cloudProfile()){ setSyncStatus('☁ 코드 미설정 (클릭)','#b07d0a'); _initDone=true; return; }
+  if(!cloudProfile()){ setSyncStatus('☁ 동기화 코드 설정','var(--dim)'); _initDone=true; return; }
   setSyncStatus('☁ 확인중…','var(--dim)');
   try{
-    const row=await cloudFetch();
-    const ls=safeLS();
-    const localRaw=ls?ls.getItem(LS_KEY):null;
-    const localActiveAt=(function(){ try{ return JSON.parse(localRaw).savedAt||0; }catch(e){ return 0; } })();
-    const localAt=Math.max(localActiveAt, getSets().savedAt||0, getPresetStore().savedAt||0);
-    let cloudAt=0, cloudActive=null, cloudSets=null, cloudPresets=null;
-    if(row&&row.data){
-      if(row.data.__bundle){ cloudAt=row.data.savedAt||0; cloudActive=row.data.active; cloudSets=row.data.sets; cloudPresets=row.data.presets; }
-      else { cloudAt=row.data.savedAt||new Date(row.updated_at).getTime(); cloudActive=row.data; } // 구버전 호환
-    }
-    // ── 프리셋은 항상 병합(기기간 사용자 프리셋 유실 방지): 로컬+클라우드 사용자프리셋(id 'u*') 합집합 ──
-    if(cloudPresets && cloudPresets.types){
-      const localPS=getPresetStore();
-      let merged=false;
-      Object.keys(cloudPresets.types).forEach(t=>{
-        localPS.types[t]=localPS.types[t]||[];
-        (cloudPresets.types[t]||[]).forEach(cp=>{
-          if(!localPS.types[t].some(lp=>lp.id===cp.id)){ localPS.types[t].push(cp); merged=true; }
-        });
-      });
-      if(merged && ls){ localPS.savedAt=Date.now(); ls.setItem(LS_PRESETS, JSON.stringify(localPS));
-        // 파라미터 패널 열려있으면 프리셋 목록 갱신
-        const openModal=document.querySelector('div[style*="z-index:9999"]');
-        if(openModal && window._openSlotId && typeof openSlotParams==='function'){ try{ openSlotParams(window._openSlotId); }catch(e){} }
-      }
-    }
-    if(row && cloudActive && cloudAt>=localAt){
-      // 클라우드가 최신(또는 동점) → active/sets 반영 (프리셋은 위에서 병합됨)
-      if(ls&&cloudActive) ls.setItem(LS_KEY, JSON.stringify(cloudActive));
-      if(ls&&cloudSets) ls.setItem(LS_SETS, JSON.stringify(cloudSets));
-      loadAll(); renderWeights(); renderTw(); getFeeRate(); renderWsTabs(); run();
-      _initDone=true;
-      setSyncStatus('☁ 동기화됨 ('+cloudProfile()+')','#2e7d32');
-    }else if(localRaw && localAt>cloudAt){
-      _initDone=true;
-      await cloudPush(); // 로컬이 명확히 최신 → 업로드 (병합 프리셋 포함)
-    }else{
-      _initDone=true;
-      await cloudPush(); // 클라우드 없음 → 로컬 업로드
-      setSyncStatus('☁ 동기화됨 ('+cloudProfile()+')','#2e7d32');
-    }
-  }catch(e){ _initDone=true; setSyncStatus('☁ 오프라인(로컬만 저장)','#c62828'); }
+    let row=null; try{ row=await cloudFetch(); }catch(e){ row=null; }
+    const m=mergeWithCloud(row);            // 로컬+클라우드 합집합 (삭제기록 반영)
+    _initDone=true;
+    if(m.changedLocal) applyLocalToUI();
+    await cloudPush();                       // 병합 결과 업로드 → 양쪽 일치 (상태는 cloudPush가 표시)
+  }catch(e){ _initDone=true; setSyncStatus('☁ 오프라인: '+(e&&e.message?e.message:e),'#c62828'); }
 }
 function safeLS(){ try{ return window.localStorage; }catch(e){ return null; } }
 function saveAll(){
@@ -2714,10 +2788,10 @@ function saveAll(){
   if(!_initDone){
     try{ const prev=JSON.parse(ls.getItem(LS_KEY)); savedAt=(prev&&prev.savedAt)?prev.savedAt:0; }catch(e){ savedAt=0; }
   }
-  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, savedAt};
+  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, savedAt, deletedSlots:DELETED_SLOTS.slice(-200)};
   try{ ls.setItem(LS_KEY, JSON.stringify(payload)); }catch(e){}
   wsStoreActive(payload); // 현재 설정 탭에도 자동저장
-  if(_initDone) cloudSchedulePush(); // 클라우드 자동 업로드 (디바운스)
+  if(_initDone && !_applying) cloudSchedulePush(); // 클라우드 자동 업로드 (디바운스)
 }
 function loadAll(){
   const ls=safeLS(); if(!ls) return false;
@@ -2738,7 +2812,9 @@ function loadAll(){
   // 백테스트 비중/on 복원
   if(d.slots && Array.isArray(d.slots) && d.slots.length){
     SLOTS=d.slots.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on!==false,w:s.w||0,presetId:s.presetId||null,params:s.params||{},sec:s.sec||false,secW:s.secW}));
-    let mx=0; SLOTS.forEach(s=>{ const n=parseInt(String(s.id).replace('s',''))||0; if(n>mx)mx=n; }); _slotSeq=mx;
+    let mx=0; SLOTS.forEach(s=>{ const n=parseInt(String(s.id).replace('s',''))||0; if(n>mx)mx=n; });
+    if(Array.isArray(d.deletedSlots)){ DELETED_SLOTS=d.deletedSlots.slice(); DELETED_SLOTS.forEach(id=>{ const n=parseInt(String(id).replace('s',''))||0; if(n>mx)mx=n; }); }
+    _slotSeq=Math.max(_slotSeq||0, mx);
   }
   // 3모드 티어비중 복원
   if(d.tw){ for(const m in d.tw){ if(TW[m]&&Array.isArray(d.tw[m])) TW[m]=d.tw[m].slice(); } }
