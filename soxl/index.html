@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v43 · 프리셋동기화</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v45 · 전체동기화수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1566,6 +1566,7 @@ function presetAdd(slotId){
   o.types[sl.type].push({id, name:name.trim(), p:slotEffectiveParams(sl)});
   putPresetStore(o);
   sl.presetId=id; saveAll(); openSlotParams(slotId); renderWeights(); run();
+  if(typeof cloudPush==='function' && _initDone) cloudPush(); // 프리셋 저장 즉시 클라우드 업로드
 }
 function presetEdit(slotId, presetId){
   const sl=slotById(slotId); if(!sl) return;
@@ -1597,6 +1598,7 @@ function slotPresetLabel(sl){
 }
 function openSlotParams(id){
   const sl=slotById(id); if(!sl) return;
+  window._openSlotId=id;
   const pre=TYPE_PREFIX[sl.type];
   const groups=PARAM_GROUPS.filter(g=>g.rows.some(r=>r[0].startsWith(pre)));
   let h=`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px" onclick="if(event.target===this)closeSlotParams()">`;
@@ -1731,7 +1733,7 @@ function openSlotParams(id){
     const _tgt=_all2[_focIdx];
     if(_tgt){ _tgt.focus(); try{ if(_selS!=null&&_tgt.setSelectionRange)_tgt.setSelectionRange(_selS,_selE); }catch(e){} } }
 }
-function closeSlotParams(){ const m=document.getElementById('slot-param-modal'); if(m) m.innerHTML=''; renderWeights(); run(); }
+function closeSlotParams(){ window._openSlotId=null; const m=document.getElementById('slot-param-modal'); if(m) m.innerHTML=''; renderWeights(); run(); }
 // ===== 언더워터 기간 (연도별: 그 해 전고점 회복까지 최장 거래일) =====
 function yearUnderwater(results, active, wsum, year){
   const base=results[active[0]].series;
@@ -2665,22 +2667,25 @@ async function cloudInit(){
           if(!localPS.types[t].some(lp=>lp.id===cp.id)){ localPS.types[t].push(cp); merged=true; }
         });
       });
-      if(merged && ls){ localPS.savedAt=Date.now(); ls.setItem(LS_PRESETS, JSON.stringify(localPS)); }
+      if(merged && ls){ localPS.savedAt=Date.now(); ls.setItem(LS_PRESETS, JSON.stringify(localPS));
+        // 파라미터 패널 열려있으면 프리셋 목록 갱신
+        const openModal=document.querySelector('div[style*="z-index:9999"]');
+        if(openModal && window._openSlotId && typeof openSlotParams==='function'){ try{ openSlotParams(window._openSlotId); }catch(e){} }
+      }
     }
-    if(row && cloudAt>localAt){
-      // 클라우드가 최신 → active/sets 반영 (프리셋은 위에서 병합됨)
+    if(row && cloudActive && cloudAt>=localAt){
+      // 클라우드가 최신(또는 동점) → active/sets 반영 (프리셋은 위에서 병합됨)
       if(ls&&cloudActive) ls.setItem(LS_KEY, JSON.stringify(cloudActive));
       if(ls&&cloudSets) ls.setItem(LS_SETS, JSON.stringify(cloudSets));
       loadAll(); renderWeights(); renderTw(); getFeeRate(); renderWsTabs(); run();
       _initDone=true;
-      await cloudPush(); // 병합된 프리셋 다시 업로드해 양쪽 일치
       setSyncStatus('☁ 동기화됨 ('+cloudProfile()+')','#2e7d32');
     }else if(localRaw && localAt>cloudAt){
       _initDone=true;
-      await cloudPush(); // 로컬이 최신 → 업로드 (병합 프리셋 포함)
+      await cloudPush(); // 로컬이 명확히 최신 → 업로드 (병합 프리셋 포함)
     }else{
       _initDone=true;
-      await cloudPush(); // 프리셋 병합분 반영 위해 업로드
+      await cloudPush(); // 클라우드 없음 → 로컬 업로드
       setSyncStatus('☁ 동기화됨 ('+cloudProfile()+')','#2e7d32');
     }
   }catch(e){ _initDone=true; setSyncStatus('☁ 오프라인(로컬만 저장)','#c62828'); }
