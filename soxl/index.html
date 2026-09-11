@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v47 · 전체저장버튼</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v48 · 수동저장만</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -2732,25 +2732,11 @@ function applyLocalToUI(){
   }catch(e){}
   _applying=false;
 }
-async function cloudPullApply(){
-  const prof=cloudProfile(); if(!cloudOn()||!prof||!_initDone||_cloudBusy) return;
-  _cloudBusy=true;
-  try{ const row=await cloudFetch(); const m=mergeWithCloud(row);
-    if(m.changedLocal) applyLocalToUI();
-    _cloudBusy=false;
-    if(m.snapshot) setSyncStatus('☁ 최종본 받음 ('+prof+')','#1565c0');
-    if(m.cloudMissing) cloudSchedulePush();   // 클라우드에 없는 로컬 항목이 있으면 올려서 양쪽 일치
-    return;
-  }catch(e){}
-  _cloudBusy=false;
-}
-// 30초마다 + 화면 다시 볼 때 클라우드 변경 반영 (다른 기기에서 저장한 것)
-setInterval(()=>{ try{ cloudPullApply(); }catch(e){} }, 30000);
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ try{ cloudPullApply(); }catch(e){} } });
+/* cloudPullApply 제거: 자동 수신 없음 — 페이지 로드시 cloudInit에서만 최종본 수신 */
+// 자동 pull 비활성화 — 페이지 로드시에만 클라우드 최종본을 받음 (사용자 요청)
 function cloudSchedulePush(){
-  if(!cloudOn()||!cloudProfile()) return;
-  if(_cloudTimer) clearTimeout(_cloudTimer);
-  _cloudTimer=setTimeout(cloudPush, 1500);
+  // 자동 업로드 비활성화 — 'ê˜ 전체 저장' 버튼으로만 저장 (사용자 요청)
+  return;
 }
 async function cloudInit(){
   if(!cloudOn()){ setSyncStatus('',''); _initDone=true; return; }
@@ -2758,10 +2744,16 @@ async function cloudInit(){
   setSyncStatus('☁ 확인중…','var(--dim)');
   try{
     let row=null; try{ row=await cloudFetch(); }catch(e){ row=null; }
-    const m=mergeWithCloud(row);            // 로컬+클라우드 합집합 (삭제기록 반영)
+    const C=bundleFromRow(row);
     _initDone=true;
-    if(m.changedLocal) applyLocalToUI();
-    await cloudPush();                       // 병합 결과 업로드 → 양쪽 일치 (상태는 cloudPush가 표시)
+    // 페이지 로드시: 클라우드에 '전체 저장' 최종본이 로컬보다 새로우면 그것만 받아 적용. 자동 업로드는 안 함.
+    if(C && (C.snapshotAt||0) > localSnapAt()){
+      writeLocalBundle({active:C.active, sets:C.sets, presets:C.presets}); setLocalSnapAt(C.snapshotAt);
+      applyLocalToUI();
+      setSyncStatus('☁ 최종본 불러옴 ('+cloudProfile()+')','#1565c0');
+    } else {
+      setSyncStatus('☁ 준비됨 ('+cloudProfile()+') · 전체 저장으로 올리기','#1565c0');
+    }
   }catch(e){ _initDone=true; setSyncStatus('☁ 오프라인: '+(e&&e.message?e.message:e),'#c62828'); }
 }
 function safeLS(){ try{ return window.localStorage; }catch(e){ return null; } }
