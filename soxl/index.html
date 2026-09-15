@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v49 · 데이터0911</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v50 · MDD그래프</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1774,7 +1774,10 @@ function showYearChart(year){
     if(_resetOn){ if(_rsBaseV===null)_rsBaseV=v; const rel=v/_rsBaseV; actual=_rsCash+_rsInv*rel;
       if(rel>=_rsTarget){ _rsCash=actual*(1-_rsReinv); _rsInv=actual*_rsReinv; _rsBaseV=null; } }
     else actual=v;
-    return {ymd, val:(actual-1)*100}; }); // 연초대비 % (현금포함)
+    return {ymd, val:(actual-1)*100, asset:actual}; }); // 연초대비 % (현금포함)
+  // 각 시점 낙폭(drawdown %) = 그때까지 최고자산 대비 하락률
+  let _peak=pts.length?pts[0].asset:1;
+  pts.forEach(p=>{ if(p.asset>_peak)_peak=p.asset; p.dd=_peak>0?((p.asset-_peak)/_peak*100):0; });
   // 차트 (SVG)
   const W=520,H=300,padL=46,padR=16,padT=20,padB=36;
   const vals=pts.map(p=>p.val); let mn=Math.min(...vals,0), mx=Math.max(...vals,0);
@@ -1806,11 +1809,32 @@ function showYearChart(year){
     <circle cx="${x(pts.length-1)}" cy="${yy(endVal)}" r="3" fill="var(--accent2)"/>
     ${xlabels}
   </svg>`;
+  // ── MDD(낙폭) 그래프 ── 0~최저 낙폭, 빨간 영역
+  const Hd=150, ddPadB=30;
+  const dds=pts.map(p=>p.dd);
+  let ddMin=Math.min(...dds,0); if(ddMin>=0)ddMin=-1;
+  const ddRange=0-ddMin;
+  const ddY=v=>padT+(Hd-padT-ddPadB)*(1-(v-ddMin)/ddRange); // v: 0(위)~ddMin(아래)
+  let ddPath='', ddArea='';
+  pts.forEach((p,i)=>{ const px=x(i).toFixed(1), py=ddY(p.dd).toFixed(1); ddPath+=(i?'L':'M')+px+','+py+' '; });
+  ddArea='M'+x(0).toFixed(1)+','+ddY(0).toFixed(1)+' '+pts.map((p,i)=>'L'+x(i).toFixed(1)+','+ddY(p.dd).toFixed(1)).join(' ')+' L'+x(pts.length-1).toFixed(1)+','+ddY(0).toFixed(1)+' Z';
+  const worstDd=Math.min(...dds); const worstI=dds.indexOf(worstDd);
+  let ddYlabels='';
+  for(let k=0;k<=2;k++){ const v=ddMin*k/2; ddYlabels+=`<text x="${padL-6}" y="${(ddY(v)+3).toFixed(0)}" font-size="9" fill="var(--faint)" text-anchor="end">${v.toFixed(0)}%</text><line x1="${padL}" y1="${ddY(v).toFixed(0)}" x2="${W-padR}" y2="${ddY(v).toFixed(0)}" stroke="var(--line)" stroke-width="0.5"/>`; }
+  const svgDd=`<svg viewBox="0 0 ${W} ${Hd}" style="width:100%;height:auto">
+    ${ddYlabels}
+    <path d="${ddArea}" fill="rgba(220,53,69,0.15)" stroke="none"/>
+    <path d="${ddPath}" fill="none" stroke="var(--neg)" stroke-width="1.5"/>
+    <circle cx="${x(worstI)}" cy="${ddY(worstDd)}" r="3" fill="var(--neg)"/>
+    <text x="${x(worstI)}" y="${(ddY(worstDd)-6).toFixed(0)}" font-size="10" font-weight="700" fill="var(--neg)" text-anchor="middle">${worstDd.toFixed(1)}%</text>
+  </svg>`;
   let h=`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px" onclick="if(event.target===this)closeYearChart()">`;
   h+=`<div style="background:var(--bg);border-radius:10px;max-width:580px;width:100%;margin-top:24px;padding:20px" onclick="event.stopPropagation()">`;
   h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-weight:700;font-size:17px">${year}년 일별 자산곡선</div><button onclick="closeYearChart()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--dim)">×</button></div>`;
   h+=`<div style="font-size:12px;color:var(--dim);margin-bottom:12px">연초 대비 누적 수익률 (포트폴리오 비중 합산)</div>`;
   h+=svg;
+  h+=`<div style="font-size:12px;color:var(--neg);margin:14px 0 4px;font-weight:600">📉 낙폭(MDD) · 전고점 대비 하락률 — 최저 ${worstDd.toFixed(1)}%</div>`;
+  h+=svgDd;
   h+=`<div style="display:flex;gap:16px;margin-top:12px;font-size:12px;flex-wrap:wrap">
     <span style="color:var(--pos)">● 최고 +${maxV.toFixed(1)}%</span>
     <span style="color:var(--neg)">● 최저 ${minV.toFixed(1)}%</span>
