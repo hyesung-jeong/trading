@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v27</title>
+<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v28</title>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
 <style>
 :root{--bg:#fff;--card:#f7f8fa;--line:#e6e8ec;--ink:#191c22;--sub:#6b7280;--mut:#9aa1ad;--acc:#0f766e;--up:#dc2626;--dn:#2563eb}
@@ -571,7 +571,8 @@ function renderDrop(){
       `</tr>`; });
   // 합계 행 (전체 매수한 날/전체 거래일)
   if(totCnt>0){ const tpct=totDays>0?(totBuyDays/totDays*100):0;
-    yb.innerHTML+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td>합계</td><td>${totCnt}회</td><td style="color:var(--sub)">${tpct.toFixed(0)}%</td><td colspan="4"></td></tr>`; }
+    const _nY=Object.keys(R.yearly||{}).length||1; const _avgCnt=totCnt/_nY;
+    yb.innerHTML+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td>합계</td><td>${totCnt}회 <span style="font-weight:400;font-size:10px;color:var(--mut)">(평균 ${_avgCnt.toFixed(1)})</span></td><td style="color:var(--sub)">${tpct.toFixed(0)}%</td><td colspan="4"></td></tr>`; }
   const showKind=((C().rules||[]).filter(x=>!x.off).length>1);
   $('buybody').innerHTML=R.buys.map(b=>{
     const holdBadge = (b.holdDays!=null) ? ` <span style="color:#fff;background:#2980b9;font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px" title="매수 후 ${b.holdDays}거래일 만에 매도 목표% 도달 (${b.sellDay?dstr(b.sellDay):''})">${b.holdDays}일</span>` : (b.sellOn ? ` <span style="color:#fff;background:#e67e22;font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px" title="데이터 끝까지 매도 목표% 미도달 (아직 보유중)">보유중</span>` : '');
