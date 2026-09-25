@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v26</title>
+<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v27</title>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
 <style>
 :root{--bg:#fff;--card:#f7f8fa;--line:#e6e8ec;--ink:#191c22;--sub:#6b7280;--mut:#9aa1ad;--acc:#0f766e;--up:#dc2626;--dn:#2563eb}
@@ -534,7 +534,7 @@ function recommendSell(){
 }
 function renderDrop(){
   const R=calcDrop(); const val=R.sh*(R.last?R.last.c:0);
-  $('h_cnt').textContent=R.buys.length+'회'; $('h_inv').textContent=money(R.inv); $('h_val').textContent=money(val);
+  { const _yrs=Object.keys(R.yearly||{}).length||1; const _avg=R.buys.length/_yrs; $('h_cnt').innerHTML=R.buys.length+'회 <span style=\'font-size:11px;color:var(--mut)\'>(연평균 '+_avg.toFixed(1)+'회)</span>'; } $('h_inv').textContent=money(R.inv); $('h_val').textContent=money(val);
   const ret=R.inv>0?(val/R.inv-1)*100:0;
   $('h_ret').textContent=(ret>=0?'+':'')+ret.toFixed(1)+'%'; $('h_ret').className='v '+cls(ret);
   $('h_mdd').textContent=R.mdd.toFixed(1)+'%';
