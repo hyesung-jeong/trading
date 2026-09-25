@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v51 · 데이터0918</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v52 · 리셋탭독립</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1398,9 +1398,7 @@ function setRebal(){ try{ const el=document.getElementById('rebalMode'); if(el) 
 function setReset(){
   const on=document.getElementById('resetOn'), row=document.getElementById('resetRow');
   if(on&&row) row.style.display=on.checked?'flex':'none';
-  try{ localStorage.setItem('soxl_reset', JSON.stringify({on:on?on.checked:false,
-    tgt:(document.getElementById('resetTarget')||{}).value,
-    reinv:(document.getElementById('resetReinv')||{}).value})); }catch(e){}
+  saveAll(); // 익절 리셋은 현재 설정탭에 저장 (탭별 독립)
   run();
 }
 function setSecMdd(id,v){ const sl=slotById(id); if(!sl)return; const x=parseFloat(v); if(!isNaN(x)&&x>0&&x<100){ sl.secMdd=x; saveAll(); run(); } }
@@ -2804,7 +2802,8 @@ function saveAll(){
   if(!_initDone){
     try{ const prev=JSON.parse(ls.getItem(LS_KEY)); savedAt=(prev&&prev.savedAt)?prev.savedAt:0; }catch(e){ savedAt=0; }
   }
-  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, savedAt, deletedSlots:DELETED_SLOTS.slice(-200)};
+  const reset={ on:(document.getElementById('resetOn')||{}).checked||false, tgt:(document.getElementById('resetTarget')||{}).value, reinv:(document.getElementById('resetReinv')||{}).value };
+  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, reset, savedAt, deletedSlots:DELETED_SLOTS.slice(-200)};
   try{ ls.setItem(LS_KEY, JSON.stringify(payload)); }catch(e){}
   wsStoreActive(payload); // 현재 설정 탭에도 자동저장
   if(_initDone && !_applying) cloudSchedulePush(); // 클라우드 자동 업로드 (디바운스)
@@ -2839,6 +2838,13 @@ function loadAll(){
   // 수수료 복원
   if(d.fee){ const fo=document.getElementById('fee-on'), fp=document.getElementById('fee-pct');
     if(fo) fo.checked=!!d.fee.on; if(fp&&d.fee.pct!=null) fp.value=d.fee.pct; }
+  // 익절 리셋 복원 (설정탭별 독립) — 탭에 없으면 끔
+  { const ro=document.getElementById('resetOn'), rt=document.getElementById('resetTarget'), rv=document.getElementById('resetReinv'), rr=document.getElementById('resetRow');
+    const rs=d.reset||{on:false};
+    if(ro) ro.checked=!!rs.on;
+    if(rt&&rs.tgt!=null&&rs.tgt!=='') rt.value=rs.tgt;
+    if(rv&&rs.reinv!=null&&rs.reinv!=='') rv.value=rs.reinv;
+    if(rr) rr.style.display=(ro&&ro.checked)?'flex':'none'; }
   return true;
 }
 
@@ -3459,11 +3465,7 @@ function resetAcctParams(){
 try{ const _sm=localStorage.getItem('soxl_startMonth'); if(_sm){ START_MONTH=parseInt(_sm)||1; const el=document.getElementById('startMonth'); if(el) el.value=START_MONTH; } }catch(e){}
 initDateRange(); loadAll();
 try{ const _rb=localStorage.getItem('soxl_rebal'); if(_rb){ const el=document.getElementById('rebalMode'); if(el) el.value=_rb; } }catch(e){}
-try{ const _rs=localStorage.getItem('soxl_reset'); if(_rs){ const o=JSON.parse(_rs);
-  const on=document.getElementById('resetOn'); if(on)on.checked=!!o.on;
-  const t=document.getElementById('resetTarget'); if(t&&o.tgt!=null)t.value=o.tgt;
-  const rv=document.getElementById('resetReinv'); if(rv&&o.reinv!=null)rv.value=o.reinv;
-  if(typeof setReset==='function'){ const row=document.getElementById('resetRow'); if(row&&on)row.style.display=on.checked?'flex':'none'; } } }catch(e){}
+/* 익절리셋 옛 전역복원 제거 — 설정탭별 복원(loadAll)으로 대체 */
  renderWeights(); renderTw(); if(typeof renderTwdg==="function")renderTwdg(); getFeeRate(); renderWsTabs();
 // 클라우드 동기화 시작 (설정돼 있으면)
 if(cloudOn() && !cloudProfile()) askCloudProfile(); else cloudInit();
