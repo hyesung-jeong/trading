@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v28</title>
+<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v29</title>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
 <style>
 :root{--bg:#fff;--card:#f7f8fa;--line:#e6e8ec;--ink:#191c22;--sub:#6b7280;--mut:#9aa1ad;--acc:#0f766e;--up:#dc2626;--dn:#2563eb}
@@ -210,7 +210,35 @@ const $=id=>document.getElementById(id);
 const LSK='combo_sim_v1';
 
 // ===== Supabase 동기화 (hs4) =====
-const SUPABASE_URL = 'https://geknetdxopjpyuhpmyyp.supabase.co';      // 배포 시 입력
+const SUPABASE_URL = 'https://geknetdxopjpyuhpmyyp.supabase.co';
+// ── 수동 입력 주가(hs-price) 로드 → ST.adds에 병합 (백테 자동반영) ──
+const PRICE_CODE='hs-price';
+async function fetchManualPrices(){
+  try{
+    const url=SUPABASE_URL+'/rest/v1/configs?id=eq.'+PRICE_CODE+'&select=data';
+    const res=await fetch(url,{headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}});
+    if(!res.ok) return false;
+    const rows=await res.json();
+    const d=rows.length?rows[0].data:null;
+    if(!d||!Array.isArray(d.prices)) return false;
+    // ST.adds[tk] = [[ymd,c,lo,hi], ...] 형태로 (getRows가 이 형식 기대)
+    const adds={SOXL:[],TQQQ:[],QQQ:[],SOXX:[],QLD:[]};
+    d.prices.forEach(p=>{
+      if(p.SOXL) adds.SOXL.push([p.d,p.SOXL.c,p.SOXL.l,p.SOXL.h]);
+      if(p.TQQQ) adds.TQQQ.push([p.d,p.TQQQ.c,p.TQQQ.l,p.TQQQ.h]);
+      if(p.QQQ) adds.QQQ.push([p.d,p.QQQ.c,p.QQQ.l]);
+      if(p.SOXX) adds.SOXX.push([p.d,p.SOXX.c,p.SOXX.l]);
+      if(p.QLD) adds.QLD.push([p.d,p.QLD.c,p.QLD.l]);
+    });
+    // 내장 RAW 마지막 날짜 이후만 추가 (중복 방지)
+    for(const tk in adds){
+      const lastRaw=(RAW[tk]&&RAW[tk].length)?RAW[tk][RAW[tk].length-1][0]:'000000';
+      ST.adds[tk]=adds[tk].filter(a=>a[0]>lastRaw).sort((x,y)=>x[0].localeCompare(y[0]));
+    }
+    return true;
+  }catch(e){ return false; }
+}
+      // 배포 시 입력
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdla25ldGR4b3BqcHl1aHBteXlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMjgzMzEsImV4cCI6MjA5ODYwNDMzMX0.bii7QeV2iVqr4FDVv3caLcz6a5Qob4hly5OHtb6Lccc'; // 배포 시 입력
 const CLOUD_PROFILE_KEY='soxl_asset_profile'; // 다른 사이트와 같은 코드 공유(hs#)
 let _cloudTimer=null,_cloudBusy=false,_initDone=false;
@@ -269,7 +297,7 @@ let ST={ticker:'SOXL', view:'drop',
   cfg:{ SOXL:{th:-10,thA:-10,thB:-10,amt:1000,y0:2018,y1:2026,mode:'A'}, TQQQ:{th:-10,thA:-10,thB:-10,amt:1000,y0:2018,y1:2026,mode:'A'}, QQQ:{th:-10,thA:-10,thB:-10,amt:1000,y0:2011,y1:2026,mode:'A'} },
   adds:{SOXL:[],TQQQ:[],QQQ:[],QLD:[]} };
 try{ const p=JSON.parse(localStorage.getItem(LSK)); if(p) ST=Object.assign(ST,p); }catch(e){}
-if(!ST.adds) ST.adds={SOXL:[],TQQQ:[]};
+if(!ST.adds) ST.adds={SOXL:[],TQQQ:[],QQQ:[],SOXX:[],QLD:[]}; ['QQQ','SOXX','QLD'].forEach(t=>{if(!ST.adds[t])ST.adds[t]=[];});
 if(!ST.cfg) ST.cfg={ SOXL:{th:-10,thA:-10,thB:-10,amt:1000,y0:2018,y1:2026,mode:'A'}, TQQQ:{th:-10,thA:-10,thB:-10,amt:1000,y0:2018,y1:2026,mode:'A'}, QQQ:{th:-10,thA:-10,thB:-10,amt:1000,y0:2011,y1:2026,mode:'A'} };
 ['SOXL','TQQQ','QQQ','QLD'].forEach(t=>{ if(!ST.cfg[t]) ST.cfg[t]={th:-10,thA:-10,thB:-10,amt:1000,y0:(t==='QQQ'?2011:2018),y1:2026,mode:'A'};
   if(!ST.cfg[t].mode)ST.cfg[t].mode='A';
@@ -891,6 +919,7 @@ document.querySelectorAll('#view-vol .seg span').forEach(x=>x.classList.toggle('
 refreshYears();
 renderAll();
 if(cloudOn() && !cloudProfile()) askCloudProfile(); else cloudInit();
+fetchManualPrices().then(ok=>{ if(ok){ refreshYears(); renderAll(); } });
 </script>
 </body>
 </html>
