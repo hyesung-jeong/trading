@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v55 · 데이터0925</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v56 · 주가겹침그래프</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1776,13 +1776,18 @@ function showYearChart(year){
   // 각 시점 낙폭(drawdown %) = 그때까지 최고자산 대비 하락률
   let _peak=pts.length?pts[0].asset:1;
   pts.forEach(p=>{ if(p.asset>_peak)_peak=p.asset; p.dd=_peak>0?((p.asset-_peak)/_peak*100):0; });
+  // 실제 SOXL 주가 (연초대비 %) — 자산곡선과 비교용
+  const _priceByYmd={}; for(let k=0;k<DATA.length;k++) _priceByYmd[DATA[k][0]]=DATA[k][1];
+  let _pBase=null;
+  pts.forEach(p=>{ const pc=_priceByYmd[p.ymd]; if(pc!=null){ if(_pBase===null)_pBase=pc; p.price=(pc/_pBase-1)*100; } else { p.price=(pts.length&&pts[0].price!=null)?p.price:null; } });
   // 차트 (SVG)
   const W=520,H=300,padL=46,padR=16,padT=20,padB=36;
-  const vals=pts.map(p=>p.val); let mn=Math.min(...vals,0), mx=Math.max(...vals,0);
+  const vals=pts.map(p=>p.val); const pvals=pts.map(p=>p.price).filter(v=>v!=null); let mn=Math.min(...vals,...(pvals.length?pvals:[0]),0), mx=Math.max(...vals,...(pvals.length?pvals:[0]),0);
   if(mn===mx){mn-=1;mx+=1;} const range=mx-mn;
   const x=i=>padL+(W-padL-padR)*i/(pts.length-1||1);
   const yy=v=>padT+(H-padT-padB)*(1-(v-mn)/range);
   let path=''; pts.forEach((p,i)=>{ path+=(i?'L':'M')+x(i).toFixed(1)+','+yy(p.val).toFixed(1)+' '; });
+  let pricePath=''; let _pStarted=false; pts.forEach((p,i)=>{ if(p.price==null)return; pricePath+=(_pStarted?'L':'M')+x(i).toFixed(1)+','+yy(p.price).toFixed(1)+' '; _pStarted=true; });
   // 0선
   const zeroY=yy(0);
   // peak/저점 표시
@@ -1801,6 +1806,7 @@ function showYearChart(year){
   const svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
     ${ylabels}
     <line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3,3"/>
+    <path d="${pricePath}" fill="none" stroke="var(--dim)" stroke-width="1.3" stroke-dasharray="4,3" opacity="0.75"/>
     <path d="${path}" fill="none" stroke="var(--accent2)" stroke-width="2"/>
     <circle cx="${x(maxI)}" cy="${yy(maxV)}" r="3" fill="var(--pos)"/>
     <circle cx="${x(minI)}" cy="${yy(minV)}" r="3" fill="var(--neg)"/>
@@ -1829,7 +1835,8 @@ function showYearChart(year){
   let h=`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px" onclick="if(event.target===this)closeYearChart()">`;
   h+=`<div style="background:var(--bg);border-radius:10px;max-width:580px;width:100%;margin-top:24px;padding:20px" onclick="event.stopPropagation()">`;
   h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-weight:700;font-size:17px">${year}년 일별 자산곡선</div><button onclick="closeYearChart()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--dim)">×</button></div>`;
-  h+=`<div style="font-size:12px;color:var(--dim);margin-bottom:12px">연초 대비 누적 수익률 (포트폴리오 비중 합산)</div>`;
+  h+=`<div style="font-size:12px;color:var(--dim);margin-bottom:6px">연초 대비 누적 수익률 (포트폴리오 비중 합산)</div>`;
+  h+=`<div style="font-size:11px;margin-bottom:10px;display:flex;gap:14px"><span style="color:var(--accent2)">━ 전략 자산</span><span style="color:var(--dim)">┅ SOXL 실제주가</span></div>`;
   h+=svg;
   h+=`<div style="font-size:12px;color:var(--neg);margin:14px 0 4px;font-weight:600">📉 낙폭(MDD) · 전고점 대비 하락률 — 최저 ${worstDd.toFixed(1)}%</div>`;
   h+=svgDd;
