@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v56 · 주가겹침그래프</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v57 · 수동주가날짜갱신</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -2037,9 +2037,9 @@ function setTHold(mode,i,v){ THOLD[mode][i]=parseInt(v)||0; run(); }
 (function(){ const _rt=renderTw; renderTw=function(){ _rt(); try{ renderTwDf(); }catch(e){} }; })();
 
 // ===== 백테스트 날짜(연도) 구간 =====
-const DATA_Y0=(function(){ let m=9999; DATA.forEach(r=>{ if(r[6]!==1){ const y=fyOf(r[0]); if(y<m)m=y; } }); return m; })(), DATA_Y1=(function(){ let m=2016; DATA.forEach(r=>{ if(r[6]!==1){ const y=fyOf(r[0]); if(y>m)m=y; } }); return m; })();
+let DATA_Y0=(function(){ let m=9999; DATA.forEach(r=>{ if(r[6]!==1){ const y=fyOf(r[0]); if(y<m)m=y; } }); return m; })(), DATA_Y1=(function(){ let m=2016; DATA.forEach(r=>{ if(r[6]!==1){ const y=fyOf(r[0]); if(y>m)m=y; } }); return m; })();
 // 데이터 마지막 거래일(워밍업 제외)을 "YYYY.MM.DD" 형식으로 자동 추출 → 백테스트 가능 범위 표시용
-const DATA_LAST_DATE=(function(){ let last=null; DATA.forEach(r=>{ if(r[6]!==1) last=r[0]; });
+let DATA_LAST_DATE=(function(){ let last=null; DATA.forEach(r=>{ if(r[6]!==1) last=r[0]; });
   if(!last) return ""; return "20"+last.slice(0,2)+"."+last.slice(2,4)+"."+last.slice(4,6); })();
 const DATA_FIRST_DATE=(function(){ for(const r of DATA){ if(r[6]!==1) return "20"+r[0].slice(0,2)+"."+r[0].slice(2,4)+"."+r[0].slice(4,6); } return ""; })();
 const BACKTEST_Y0=2018; // 백테스트 기본 시작연도
@@ -2551,6 +2551,14 @@ function _weeklyLast(rows){ // rows:[{ymd,c}] → 주간 마지막거래일 [{wk
 }
 function _dualModes(wr){ const m=[]; let pm=0; for(let i=0;i<wr.length;i++){ if(i<1||wr[i]==null||wr[i-1]==null){m.push(pm);continue;} const T=Math.round(wr[i]*10)/10,U=Math.round(wr[i-1]*10)/10; let mm=pm; if(T>U&&((T>=52&&T<=60)||T<35))mm=1; else if(T<U&&((T>=40&&T<52)||T>65))mm=0; m.push(mm);pm=mm; } return m; }
 function _dongpaModes(wr){ const m=[]; let pm=0; for(let i=0;i<wr.length;i++){ if(i<2||wr[i]==null||wr[i-1]==null||wr[i-2]==null){m.push(pm);continue;} const r2=wr[i-2],r1=wr[i-1]; let mm=pm; if((r2<=50&&r1>50)||(r2>=50&&r2<=60&&r1>r2)||(r2<=35&&r1>r2))mm=1; else if((r2>=65&&r1<r2)||(r2>=40&&r2<=50&&r1<r2)||(r2>=50&&r1<50))mm=0; m.push(mm);pm=mm; } return m; }
+function _recalcDataMeta(){
+  // 수동주가 반영 후 DATA_LAST_DATE·연도범위 재계산
+  let last=null; for(let k=0;k<DATA.length;k++){ if(DATA[k][6]!==1){ last=DATA[k][0]; } }
+  if(!last&&DATA.length) last=DATA[DATA.length-1][0];
+  if(last){ DATA_LAST_DATE=('20'+last.slice(0,2)+'.'+last.slice(2,4)+'.'+last.slice(4,6)); }
+  let mx=0; DATA.forEach(r=>{ const y=2000+parseInt(r[0].slice(0,2)); if(y>mx)mx=y; });
+  if(mx>DATA_Y1) DATA_Y1=mx;
+}
 async function fetchAndApplyPrices(){
   try{
     const url=SUPABASE_URL+'/rest/v1/configs?id=eq.'+PRICE_CODE_SOXL+'&select=data';
@@ -3532,7 +3540,7 @@ function resetAcctParams(){
 /* 시작월 옛 전역복원 제거 — 설정탭별 복원(loadAll)으로 대체 */
 initDateRange(); loadAll();
 // 수동 주가(hs-price) 로드 → DATA 갱신 후 날짜범위·백테 재생성
-fetchAndApplyPrices().then(ok=>{ if(ok){ try{ initDateRange(); if(typeof run==='function') run(); if(typeof renderDataTab==='function') renderDataTab(); }catch(e){} } });
+fetchAndApplyPrices().then(ok=>{ if(ok){ try{ _recalcDataMeta(); initDateRange(); if(typeof run==='function') run(); if(typeof renderDataTab==='function') renderDataTab(); }catch(e){} } });
 try{ const _rb=localStorage.getItem('soxl_rebal'); if(_rb){ const el=document.getElementById('rebalMode'); if(el) el.value=_rb; } }catch(e){}
 /* 익절리셋 옛 전역복원 제거 — 설정탭별 복원(loadAll)으로 대체 */
  renderWeights(); renderTw(); if(typeof renderTwdg==="function")renderTwdg(); getFeeRate(); renderWsTabs();
