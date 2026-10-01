@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v57 · 수동주가날짜갱신</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v59 · 현금그래프</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -371,7 +371,7 @@
       </div>
       <div class="panel compact">
         <div class="panel-h">연도별 성과 · 포트폴리오</div>
-        <table><thead><tr><th>연도</th><th>수익률</th><th>최고수익</th><th>최저수익</th><th>MDD</th><th title="그 해 전고점 회복까지 최장 물속 기간(거래일)">언더워터</th><th>Calmar</th></tr></thead>
+        <table><thead><tr><th>연도</th><th>수익률</th><th>최고수익</th><th>최저수익</th><th>MDD</th><th title="그 해 현금 비중이 가장 낮았던 지점 (주식 최대 투자)">최소현금</th><th title="그 해 전고점 회복까지 최장 물속 기간(거래일)">언더워터</th><th>Calmar</th></tr></thead>
         <tbody id="yearbody"></tbody></table>
       </div>
       <div class="panel">
@@ -671,7 +671,7 @@ function runDual(rows, P){
     }
     let holdSh=0; for(let k=0;k<nA;k++) if(aocc[k])holdSh+=ash[k];
     for(let k=0;k<nD;k++) if(docc[k])holdSh+=dsh[k];
-    daily.push({ymd:rows[i][0], year:years[i], asset:cash+holdSh*close});
+    daily.push({ymd:rows[i][0], year:years[i], asset:cash+holdSh*close, cash:cash});
     prevCash=cash;
     prevMocDay=hasMoc;
   }
@@ -801,7 +801,7 @@ function aggregate(daily, initCap){
     const ret=(end/initCap-1)*100; let peak=initCap,mdd=0,minAsset=initCap;
     a.forEach(d=>{ const v=d.asset; if(v>peak)peak=v; const dd=(v-peak)/peak*100; if(dd<mdd)mdd=dd;
       if(v<minAsset)minAsset=v;
-      series[d.ymd]=v/initCap; });
+      series[d.ymd]=v/initCap; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cash!==undefined&&v>0?d.cash/v:1); });
     const maxRet=(peak/initCap-1)*100;  // 연중 최고 수익률
     const minRet=(minAsset/initCap-1)*100;  // 연중 최저 수익률
     yearly[y]={ret:ret,mdd:mdd,maxRet:maxRet,minRet:minRet}; });
@@ -826,7 +826,7 @@ function runDongpa(rows, P){
     const fi=firstIdxOfYear[y];
     if(fi>0) prevYearClose=rows[fi-1][1];
     const r=backtestYear(byYear[y],P,tlog,prevYearClose); yearly[y]={ret:r.ret,mdd:r.mdd,maxRet:r.maxRet,minRet:r.minRet};
-    r.series.forEach(d=>{ series[d.ymd]=d.mult; }); });
+    r.series.forEach(d=>{ series[d.ymd]=d.mult; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cashR!==undefined?d.cashR:1); }); });
   return {yearly, years, series, tlog};
 }
 // ===== 동파 + 세컨 결합 엔진 =====
@@ -844,7 +844,7 @@ function runDongpaSecond(rows, P, wMainFrac, wSecFrac){
     const r=btYearSecond(byYear[y],P,tlog,pyc,wMainFrac,wSecFrac);
     yearly[y]={ret:r.ret,mdd:r.mdd,maxRet:r.maxRet,minRet:r.minRet};
     if(r.secStartYmd) secStart[y]=r.secStartYmd;
-    r.series.forEach(d=>{ series[d.ymd]=d.mult; }); });
+    r.series.forEach(d=>{ series[d.ymd]=d.mult; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cashR!==undefined?d.cashR:1); }); });
   return {yearly, years, series, tlog, secStart};
 }
 // 한 해 안에서 메인+세컨을 동시에 시뮬레이션
@@ -992,7 +992,7 @@ function backtestYear(items,P,tlog,prevYearClose){
     if(total>peak) peak=total;
     if(total<minTotal) minTotal=total;
     if(peak>0){ const dd=(peak-total)/peak*100; if(dd>maxDD) maxDD=dd; }
-    series.push({ymd:items[day].r[0], mult:total/P.initCap});
+    series.push({ymd:items[day].r[0], mult:total/P.initCap, cashR:(total>0?cash/total:1)});
     prevClose=price;
   }
   // 마지막 청산
@@ -1064,7 +1064,7 @@ function runDropf(rows, P){
     if(total>peak) peak=total;
     if(total<ymin) ymin=total;
     const dd=peak>0?(peak-total)/peak:0; if(dd>ymdd) ymdd=dd;
-    series[rows[i][0]]=total/yStart;
+    series[rows[i][0]]=total/yStart; if(!series._cashR)series._cashR={}; series._cashR[rows[i][0]]=(total>0?cash/total:1);
   }
   let gross=0; inv.forEach(p=>gross+=p.qty*closes[n-1]);
   const eq=gross-gross*TOTAL_SELL_FEE; const endAsset=trunc2(cash+eq+EPS3);
@@ -1151,7 +1151,7 @@ function runThree(rows, P){
     if(total>peak) peak=total;
     if(total<ymin) ymin=total;
     const dd=peak>0?(peak-total)/peak:0; if(dd>ymdd) ymdd=dd;
-    series[rows[i][0]]=total/yStart;
+    series[rows[i][0]]=total/yStart; if(!series._cashR)series._cashR={}; series._cashR[rows[i][0]]=(total>0?cash/total:1);
   }
   // 마지막연도
   let gross=0; inv.forEach(p=>gross+=p.qty*closes[n-1]);
@@ -1767,12 +1767,14 @@ function showYearChart(year){
   const _rsTarget=1+((_rsT?parseFloat(_rsT.value):100)||100)/100;
   const _rsReinv=((_rsR?parseFloat(_rsR.value):40)||40)/100;
   let _rsCash=0,_rsInv=1,_rsBaseV=null;
-  const pts=ymds.map(ymd=>{ let v=0; active.forEach(s=>{ const sl=slotById(s); v+=((sl?sl.w:0)/wsum)*results[s].series[ymd]; });
+  const pts=ymds.map(ymd=>{ let v=0, vCash=0; active.forEach(s=>{ const sl=slotById(s); const contrib=((sl?sl.w:0)/wsum)*results[s].series[ymd]; v+=contrib;
+      const cr=(results[s].series._cashR&&results[s].series._cashR[ymd]!=null)?results[s].series._cashR[ymd]:0; vCash+=contrib*cr; });
+    const cashPct=(v>0?vCash/v*100:0);
     let actual;
     if(_resetOn){ if(_rsBaseV===null)_rsBaseV=v; const rel=v/_rsBaseV; actual=_rsCash+_rsInv*rel;
       if(rel>=_rsTarget){ _rsCash=actual*(1-_rsReinv); _rsInv=actual*_rsReinv; _rsBaseV=null; } }
     else actual=v;
-    return {ymd, val:(actual-1)*100, asset:actual}; }); // 연초대비 % (현금포함)
+    return {ymd, val:(actual-1)*100, asset:actual, cashPct:cashPct}; }); // 연초대비 % (현금포함)
   // 각 시점 낙폭(drawdown %) = 그때까지 최고자산 대비 하락률
   let _peak=pts.length?pts[0].asset:1;
   pts.forEach(p=>{ if(p.asset>_peak)_peak=p.asset; p.dd=_peak>0?((p.asset-_peak)/_peak*100):0; });
@@ -1840,6 +1842,27 @@ function showYearChart(year){
   h+=svg;
   h+=`<div style="font-size:12px;color:var(--neg);margin:14px 0 4px;font-weight:600">📉 낙폭(MDD) · 전고점 대비 하락률 — 최저 ${worstDd.toFixed(1)}%</div>`;
   h+=svgDd;
+  // ── 현금 비율 그래프 (0~100%, 파란 영역) ──
+  const Hc=130, cPadB=30;
+  const cashVals=pts.map(p=>p.cashPct!=null?p.cashPct:0);
+  const cMax=Math.max(100, Math.ceil(Math.max(...cashVals)/10)*10);
+  const cY=v=>padT+(Hc-padT-cPadB)*(1-v/cMax);
+  let cPath='', cArea='';
+  pts.forEach((p,i)=>{ const px=x(i).toFixed(1); const py=cY(p.cashPct!=null?p.cashPct:0).toFixed(1);
+    cPath+=(i?'L':'M')+px+','+py+' '; });
+  cArea=cPath+`L${x(pts.length-1).toFixed(1)},${cY(0).toFixed(1)} L${x(0).toFixed(1)},${cY(0).toFixed(1)} Z`;
+  // 최소 현금 지점
+  let minCashI=0, minCashV=101; pts.forEach((p,i)=>{ const cv=(p.cashPct!=null?p.cashPct:0); if(cv<minCashV){minCashV=cv;minCashI=i;} });
+  let cYlabels=''; for(const v of [0,25,50,75,100]){ if(v>cMax)continue; cYlabels+=`<line x1="${padL}" y1="${cY(v).toFixed(0)}" x2="${W-padR}" y2="${cY(v).toFixed(0)}" stroke="var(--line)" stroke-width="0.5"/><text x="${padL-4}" y="${(cY(v)+3).toFixed(0)}" font-size="9" fill="var(--mut)" text-anchor="end">${v}%</text>`; }
+  const svgCash=`<svg viewBox="0 0 ${W} ${Hc}" style="width:100%;height:auto">
+    ${cYlabels}
+    <path d="${cArea}" fill="rgba(41,128,185,0.15)" stroke="none"/>
+    <path d="${cPath}" fill="none" stroke="var(--accent2)" stroke-width="1.5"/>
+    <circle cx="${x(minCashI)}" cy="${cY(minCashV)}" r="3" fill="var(--accent2)"/>
+    <text x="${x(minCashI)}" y="${(cY(minCashV)-6).toFixed(0)}" font-size="10" font-weight="700" fill="var(--accent2)" text-anchor="middle">최소 ${minCashV.toFixed(0)}%</text>
+  </svg>`;
+  h+=`<div style="font-size:12px;color:var(--accent2);margin:14px 0 4px;font-weight:600">💵 현금 비율 · 전체 자산 대비 — 최소 ${minCashV.toFixed(0)}% (주식 ${(100-minCashV).toFixed(0)}% 투자)</div>`;
+  h+=svgCash;
   h+=`<div style="display:flex;gap:16px;margin-top:12px;font-size:12px;flex-wrap:wrap">
     <span style="color:var(--pos)">● 최고 +${maxV.toFixed(1)}%</span>
     <span style="color:var(--neg)">● 최저 ${minV.toFixed(1)}%</span>
@@ -2192,7 +2215,7 @@ function render(results){
     yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td style="white-space:nowrap;text-align:left">${y}${START_MONTH>1?` <span style="font-size:9px;color:var(--faint)">${String(y).slice(2)}.${START_MONTH}~${String(y+1).slice(2)}.${START_MONTH-1}</span>`:''} 📈${fmtSecY(y)}${fmtResetY(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%${bRet}</td>`+
       `<td class="pos">+${mx.toFixed(1)}%</td>`+
       `<td class="${mn>=0?'pos':'neg'}">${mn>=0?'+':''}${mn.toFixed(1)}%</td>`+
-      `<td class="neg">${r.mdd.toFixed(1)}%${bMdd}</td>`+
+      `<td class="neg">${r.mdd.toFixed(1)}%${bMdd}</td>`+       `<td title="주식 최대 투자 시점">${(r.minCashPct!=null?r.minCashPct.toFixed(0):'-')}%</td>`+
       `<td title="${uw.recovered?'연내 회복':'연말까지 미회복'}">${uwTxt}</td>`+
       `<td>${c.toFixed(2)}</td></tr>`; });
   document.getElementById("yearbody").innerHTML=yb;
@@ -2271,7 +2294,7 @@ function blendDailySlots(results, active, wsum, years, forceNoReset){
   (years||[]).forEach(y=>{
     const ds=(ymdsByYear[y]||[]).sort();
     if(!ds.length){ port[y]={ret:0,mdd:0,maxRet:0,minRet:0}; return; }
-    let peak=null, mdd=0, lastVal=1, minVal=null;
+    let peak=null, mdd=0, lastVal=1, minVal=null, minCashR=1;
     let segBase=active.map((s)=>results[s].series[ds[0]]);
     let portBase=1;
     let curSeg=segKey(ds[0]);
@@ -2283,9 +2306,10 @@ function blendDailySlots(results, active, wsum, years, forceNoReset){
         curSeg=seg; portBase=lastVal;
         segBase=active.map(s=>results[s].series[ymd]);
       }
-      let v=0;
-      active.forEach((s,i)=>{ const rel=results[s].series[ymd]/segBase[i]; v += wArr[i]*rel; });
-      v*=portBase;  // 리밸런싱 반영된 "매매법 합산" 포트값 (연초=1)
+      let v=0, vCash=0;
+      active.forEach((s,i)=>{ const rel=results[s].series[ymd]/segBase[i]; const contrib=wArr[i]*rel; v += contrib;
+        const cr=(results[s].series._cashR&&results[s].series._cashR[ymd]!=null)?results[s].series._cashR[ymd]:0; vCash += contrib*cr; });
+      v*=portBase; vCash*=portBase;  // 리밸런싱 반영된 "매매법 합산" 포트값 (연초=1)
       let actual;   // 리셋 반영된 실제 자산
       if(resetOn){
         if(rsBaseV===null) rsBaseV=v;      // 이 구간 시작 v
@@ -2305,9 +2329,10 @@ function blendDailySlots(results, active, wsum, years, forceNoReset){
       if(actual>peak) peak=actual;
       if(actual<minVal) minVal=actual;
       const dd=(actual-peak)/peak*100; if(dd<mdd) mdd=dd;
+      { const cashRatio=(v>0?vCash/v:0); if(cashRatio<minCashR) minCashR=cashRatio; }
       lastVal=actual;
     });
-    port[y]={ret:(lastVal-1)*100, mdd:mdd, maxRet:(peak-1)*100, minRet:(minVal-1)*100, resetDays:resetDays};
+    port[y]={minCashPct:minCashR*100, ret:(lastVal-1)*100, mdd:mdd, maxRet:(peak-1)*100, minRet:(minVal-1)*100, resetDays:resetDays};
   });
   return port;
 }
