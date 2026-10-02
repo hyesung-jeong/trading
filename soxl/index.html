@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v71 · 익절현금보존</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v74 · MDD손절</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -261,6 +261,14 @@
               <span style="margin-left:6px">재투입</span>
               <input type="number" id="resetReinv" value="40" step="5" onchange="setReset()" style="width:56px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink);font-family:var(--mono);font-size:12px;text-align:right">%
               <span style="color:var(--faint);font-size:11px">(나머지 현금)</span>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer;margin-top:8px">
+              <input type="checkbox" id="stopOn" onchange="setStop()"> 🛑 MDD 손절 (그 해 고점 대비 낙폭 도달시 전량매도·그해 매매 종료)
+            </label>
+            <div id="stopRow" style="display:none;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;font-size:12px;color:var(--dim)">
+              <span>낙폭</span>
+              <input type="number" id="stopPct" value="20" step="1" onchange="setStop()" style="width:56px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink);font-family:var(--mono);font-size:12px;text-align:right">%
+              <span style="color:var(--faint);font-size:11px">이하 되는 날 종가 매도, 다음 회계연도 재시작</span>
             </div>
           </div>
         </div>
@@ -447,8 +455,8 @@
       <div class="panel-h">💼 실전 매매 현황</div>
       <div style="font-size:12px;color:var(--dim);margin-bottom:14px">시작 자산·시작일·매매법 비율을 넣으면, 그 날부터 지금까지 매매했을 때의 현황입니다. 각 매매법은 매년(시작월 기준) 그 시점 자산으로 리셋 재시작, 연도별 수익을 복리로 누적합니다.</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
-        <label style="font-size:13px">시작 자산($) <input type="number" id="live-cap" value="450000" step="10000" style="width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
-        <label style="font-size:13px">시작일 <input type="date" id="live-date" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
+        <label style="font-size:13px">시작 자산($) <input type="number" id="live-cap" value="450000" step="10000" onchange="saveAll();runLive()" style="width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
+        <label style="font-size:13px">시작일 <input type="date" id="live-date" onchange="saveAll();runLive()" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
         <button onclick="runLive()" style="padding:8px 18px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer">현황 계산</button>
       </div>
       <div style="font-size:12px;color:var(--mut);margin-bottom:8px">※ 매매법 비율은 아래 백테스트 설정의 현재 비중을 그대로 사용합니다.</div>
@@ -1414,6 +1422,23 @@ function setSecW(id,v,from){ const sl=slotById(id); if(!sl) return; let w=parseF
   saveAll(); run(); }
 function setSecTrig(id,val){ const sl=slotById(id); if(!sl)return; sl.secTrig=val; saveAll(); renderWeights(); run(); }
 function setRebal(){ try{ const el=document.getElementById('rebalMode'); if(el) localStorage.setItem('soxl_rebal', el.value); }catch(e){} run(); }
+function setStop(){
+  const on=document.getElementById('stopOn'), row=document.getElementById('stopRow');
+  if(on&&row) row.style.display=on.checked?'flex':'none';
+  saveAll(); run();
+}
+function _stopCfg(){ const on=!!(document.getElementById('stopOn')||{}).checked; const p=Math.abs(parseFloat((document.getElementById('stopPct')||{}).value))||20; return {on, pct:p}; }
+// 일별 [{ymd, actual, cashPct}] 에 MDD 손절 적용: 연초부터의 고점 대비 -pct% 이하가 되는 날 종가 동결
+function _applyStop(days, pct){
+  let peak=null, stopAt=null, stopVal=null;
+  const out=days.map(p=>{
+    if(stopAt!==null) return Object.assign({},p,{actual:stopVal, cashPct:100, stopped:true});
+    if(peak===null||p.actual>peak) peak=p.actual;
+    if((p.actual-peak)/peak*100 <= -pct){ stopAt=p.ymd; stopVal=p.actual; return Object.assign({},p,{cashPct:100, stopHit:true}); }
+    return p;
+  });
+  return {days:out, stopAt};
+}
 function setReset(){
   const on=document.getElementById('resetOn'), row=document.getElementById('resetRow');
   if(on&&row) row.style.display=on.checked?'flex':'none';
@@ -1793,7 +1818,7 @@ function showYearChart(year){
     if(_resetOn){ if(_rsBaseV===null)_rsBaseV=v; const rel=v/_rsBaseV; actual=_rsCash+_rsInv*rel;
       if(rel>=_rsTarget){ _rsCash=actual*(1-_rsReinv); _rsInv=actual*_rsReinv; _rsBaseV=v; } }
     else actual=v;
-    if(_resetOn&&window._rsDaily&&window._rsDaily[year]){ const _d=window._rsDaily[year].find(q=>q.ymd===ymd); if(_d) return {ymd, val:(_d.actual-1)*100, asset:_d.actual, cashPct:_d.cashPct}; }
+    if(window._yrDaily&&window._yrDaily[year]){ const _d=window._yrDaily[year].find(q=>q.ymd===ymd); if(_d) return {ymd, val:(_d.actual-1)*100, asset:_d.actual, cashPct:_d.cashPct}; }
     return {ymd, val:(actual-1)*100, asset:actual, cashPct:(_resetOn?((_rsCash+_rsInv*(v/(_rsBaseV||v))*(v>0?vCash/v:0))/actual*100):cashPct)}; }); // 연초대비 % (현금포함)
   // 각 시점 낙폭(drawdown %) = 그때까지 최고자산 대비 하락률
   let _peak=pts.length?pts[0].asset:1;
@@ -1858,6 +1883,8 @@ function showYearChart(year){
   h+=`<div style="background:var(--bg);border-radius:10px;max-width:580px;width:100%;margin-top:24px;padding:20px" onclick="event.stopPropagation()">`;
   h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-weight:700;font-size:17px">${year}년 일별 자산곡선</div><button onclick="closeYearChart()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--dim)">×</button></div>`;
   h+=`<div style="font-size:12px;color:var(--dim);margin-bottom:6px">연초 대비 누적 수익률 (포트폴리오 비중 합산)</div>`;
+  { const _pp=(window._lastPort||{})[year]; if(_pp&&_pp.stopDay){ h+=`<div style="font-size:11px;margin-bottom:6px;color:var(--neg);font-weight:600">🛑 MDD 손절: ${_pp.stopDay.slice(2,4)}/${_pp.stopDay.slice(4,6)} 종가 전량매도 → 그해 매매 종료 (이후 현금)</div>`; } }
+  if(_resetOn&&window._rsTR&&window._rsTR[year]&&window._rsTR[year].sells.length){ h+=`<div style="font-size:11px;margin-bottom:6px;color:#e8890c;font-weight:600">💰 익절 리셋(전량매도·재시작): ${(((window._lastPort||{})[year]||{}).resetDays||window._rsTR[year].sells).map(z=>z.slice(2,4)+'/'+z.slice(4,6)).join(', ')}</div>`; }
   h+=`<div style="font-size:11px;margin-bottom:10px;display:flex;gap:14px"><span style="color:var(--accent2)">━ 전략 자산</span><span style="color:var(--dim)">┅ SOXL 실제주가</span></div>`;
   h+=svg;
   h+=`<div style="font-size:12px;color:var(--neg);margin:14px 0 4px;font-weight:600">📉 낙폭(MDD) · 전고점 대비 하락률 — 최저 ${worstDd.toFixed(1)}%</div>`;
@@ -2193,7 +2220,7 @@ function render(results){
   // 비중 정규화 (슬롯 기반)
   let wsum=0; active.forEach(s=>wsum+=(slotById(s)?slotById(s).w:0)); if(wsum===0)wsum=1;
   // === 진짜 일별 합산: 각 슬롯 일별배수(연초=1)를 비중대로 합쳐 연도별 수익/MDD ===
-  const port=blendDailySlots(results, active, wsum, years);
+  const port=blendDailySlots(results, active, wsum, years); window._lastPort=port;
   // 베이스 port: 세컨·리셋 끈 결과 (상대비교 괄호표시용)
   const basePort=blendDailySlots(window._baseResults||{}, active, wsum, years, true);
   const rets=years.map(y=>port[y].ret), mdds=years.map(y=>port[y].mdd);
@@ -2229,11 +2256,12 @@ function render(results){
   // 리셋 발동일 표시 (세컨과 구분: 주황 배지 💰)
   const fmtResetY=(y)=>{ const r=port[y]; if(!r||!r.resetDays||!r.resetDays.length) return '';
     const parts=r.resetDays.map(d=>`${d.slice(2,4)}/${d.slice(4,6)}`);
-    return ` <span style="display:inline-block;vertical-align:middle;white-space:nowrap;color:#fff;background:#e8890c;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px" title="익절 리셋일">💰 ${parts.join(' ')}</span>`; };
+    return ` <span style="display:inline-block;vertical-align:middle;white-space:nowrap;color:#fff;background:#e8890c;font-size:9px;font-weight:600;padding:0 4px;border-radius:6px" title="익절 리셋일: ${parts.join(', ')}">💰${parts.length}</span>`; };
+  const fmtStopY=(y)=>{ const r=port[y]; if(!r||!r.stopDay) return ''; const d=r.stopDay; return ` <span style="display:inline-block;vertical-align:middle;white-space:nowrap;color:#fff;background:var(--neg);font-size:9px;font-weight:600;padding:0 4px;border-radius:6px" title="MDD 손절: ${d.slice(2,4)}/${d.slice(4,6)} 종가 전량매도, 그해 종료">🛑${d.slice(2,4)}/${d.slice(4,6)}</span>`; };
   // 세컨·리셋 켜졌는지 (베이스 괄호표시 여부)
   const _secAnyOn=active.some(s=>{ const sl=slotById(s); return sl&&sl.sec; });
   const _resetNow=(document.getElementById('resetOn')||{}).checked;
-  const _showBase=_secAnyOn||_resetNow;
+  const _showBase=_secAnyOn||_resetNow||!!(document.getElementById('stopOn')||{}).checked;
   const _soxlClose={}; for(let k=0;k<DATA.length;k++) _soxlClose[DATA[k][0]]=DATA[k][1];
   function _bhRet(y){ const _bs=results[active[0]].series; const ds=Object.keys(_bs).filter(x=>fyOf(x)===y&&_soxlClose[x]!=null).sort(); if(ds.length<2)return null;
     const c0=_soxlClose[ds[0]], c1=_soxlClose[ds[ds.length-1]];
@@ -2242,14 +2270,14 @@ function render(results){
     const mx=(r.maxRet!==undefined?r.maxRet:r.ret);
     const mn=(r.minRet!==undefined?r.minRet:r.ret);
     const b=basePort[y]||{}; // 베이스값
-    const bRet=(_showBase&&b.ret!==undefined)?` <span style="color:var(--faint);font-size:10px">(${b.ret>=0?'+':''}${b.ret.toFixed(1)})</span>`:'';
-    const bMdd=(_showBase&&b.mdd!==undefined)?` <span style="color:var(--faint);font-size:10px">(${b.mdd.toFixed(1)})</span>`:'';
+    const bRet=(_showBase&&b.ret!==undefined)?` <span style="color:var(--faint);font-size:9px" title="리셋·세컨 끈 기준">(${b.ret>=0?'+':''}${b.ret.toFixed(1)})</span>`:'';
+    const bMdd=(_showBase&&b.mdd!==undefined)?` <span style="color:var(--faint);font-size:9px" title="리셋·세컨 끈 기준">(${b.mdd.toFixed(1)})</span>`:'';
     const uw=yearUnderwater(results, active, wsum, y);
     const uwTxt=uw.maxUw+'일'+(uw.recovered?'':'*');
-    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td style="white-space:nowrap;text-align:left">${y}${isVirtualYear(y)?` <span style="font-size:8px;color:#fff;background:#999;padding:1px 4px;border-radius:4px" title="2001~2010.3은 가상 SOXL 데이터">가상</span>`:''}${START_MONTH>1?` <span style="font-size:9px;color:var(--faint)">${String(y).slice(2)}.${START_MONTH}~${String(y+1).slice(2)}.${START_MONTH-1}</span>`:''} 📈${fmtSecY(y)}${fmtResetY(y)}</td><td class="${r.ret>=0?'pos':'neg'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}% <span style="font-size:9px;color:var(--faint)" title="시작연도부터 복리 누적">(${_cumPct>=0?'+':''}${_cumPct.toFixed(0)}%)</span>${bRet}</td>`+       `<td style="color:var(--mut);font-size:11px" title="SOXL 연초 매수 후 보유(Buy&Hold)">${_bh!=null?(_bh>=0?'+':'')+_bh.toFixed(0)+'%':'-'}</td>`+
+    yb+=`<tr onclick="showYearChart(${y})" style="cursor:pointer" title="클릭하면 ${y}년 일별 자산곡선"><td style="white-space:nowrap;text-align:left">${y}${isVirtualYear(y)?` <span style="font-size:8px;color:#fff;background:#999;padding:1px 4px;border-radius:4px" title="2001~2010.3은 가상 SOXL 데이터">가상</span>`:''}${START_MONTH>1?` <span style="font-size:9px;color:var(--faint)">${String(y).slice(2)}.${START_MONTH}~${String(y+1).slice(2)}.${START_MONTH-1}</span>`:''} 📈${fmtSecY(y)}${fmtResetY(y)}${fmtStopY(y)}</td><td class="${r.ret>=0?'pos':'neg'}" style="white-space:nowrap">${r.ret>=0?'+':''}${r.ret.toFixed(1)}% <span style="font-size:9px;color:var(--faint)" title="시작연도부터 복리 누적">(${_cumPct>=0?'+':''}${_cumPct.toFixed(0)}%)</span>${bRet}</td>`+       `<td style="color:var(--mut);font-size:11px" title="SOXL 연초 매수 후 보유(Buy&Hold)">${_bh!=null?(_bh>=0?'+':'')+_bh.toFixed(0)+'%':'-'}</td>`+
       `<td class="pos">+${mx.toFixed(1)}%</td>`+
       `<td class="${mn>=0?'pos':'neg'}">${mn>=0?'+':''}${mn.toFixed(1)}%</td>`+
-      `<td class="neg">${r.mdd.toFixed(1)}%${bMdd}</td>`+       `<td title="주식 최대 투자 시점">${(r.minCashPct!=null?r.minCashPct.toFixed(0):'-')}%</td>`+
+      `<td class="neg" style="white-space:nowrap">${r.mdd.toFixed(1)}%${bMdd}</td>`+       `<td title="주식 최대 투자 시점">${(r.minCashPct!=null?r.minCashPct.toFixed(0):'-')}%</td>`+
       `<td title="${uw.recovered?'연내 회복':'연말까지 미회복'}">${uwTxt}</td>`+
       `<td>${c.toFixed(2)}</td></tr>`; });
   document.getElementById("yearbody").innerHTML=yb;
@@ -2372,29 +2400,38 @@ function blendDailySlots(results, active, wsum, years, forceNoReset){
   const resetTarget=1+((rsTgtEl?parseFloat(rsTgtEl.value):100)||100)/100;
   const resetReinv=((rsReinvEl?parseFloat(rsReinvEl.value):40)||40)/100;
   const port={};
+  const SC=forceNoReset?{on:false,pct:20}:_stopCfg();
+  // 일별 → 연도 성과 (MDD 손절 적용 포함)
+  function finalize(y, days, resetDays){
+    let stopAt=null;
+    if(SC.on){ const r=_applyStop(days, SC.pct); days=r.days; stopAt=r.stopAt; }
+    let peak=null, mdd=0, minVal=null, minC=100;
+    days.forEach(p=>{ if(peak===null||p.actual>peak)peak=p.actual; if(minVal===null||p.actual<minVal)minVal=p.actual;
+      const dd=(p.actual-peak)/peak*100; if(dd<mdd)mdd=dd; if(p.cashPct<minC)minC=p.cashPct; });
+    const last=days[days.length-1].actual;
+    if(!forceNoReset) window._yrDaily[y]=days;
+    port[y]={minCashPct:minC, ret:(last-1)*100, mdd, maxRet:(peak-1)*100, minRet:(minVal-1)*100, resetDays:resetDays||[], stopDay:stopAt};
+  }
+  if(!forceNoReset) window._yrDaily={};
   if(resetOn){
     const TR=computeTrueReset(active, wsum, years, resetTarget, resetReinv);
     window._rsDaily={}; window._rsTR=TR;
     (years||[]).forEach(y=>{
       const o=TR[y]; if(!o||!o.days.length){ port[y]={ret:0,mdd:0,maxRet:0,minRet:0}; return; }
       window._rsDaily[y]=o.days;
-      let peak=null, mdd=0, minVal=null, minC=100;
-      o.days.forEach(p=>{ if(peak===null||p.actual>peak)peak=p.actual; if(minVal===null||p.actual<minVal)minVal=p.actual;
-        const dd=(p.actual-peak)/peak*100; if(dd<mdd)mdd=dd; if(p.cashPct<minC)minC=p.cashPct; });
-      const last=o.days[o.days.length-1].actual;
-      port[y]={minCashPct:minC, ret:(last-1)*100, mdd, maxRet:(peak-1)*100, minRet:(minVal-1)*100, resetDays:o.sells};
+      let sells=o.sells;
+      if(SC.on){ const st=_applyStop(o.days, SC.pct).stopAt; if(st) sells=sells.filter(z=>z<=st); }
+      finalize(y, o.days, sells);
     });
     return port;
   }
   (years||[]).forEach(y=>{
     const ds=(ymdsByYear[y]||[]).sort();
     if(!ds.length){ port[y]={ret:0,mdd:0,maxRet:0,minRet:0}; return; }
-    let peak=null, mdd=0, lastVal=1, minVal=null, minCashR=1;
     let segBase=active.map((s)=>results[s].series[ds[0]]);
-    let portBase=1;
+    let portBase=1, lastVal=1;
     let curSeg=segKey(ds[0]);
-    // 리셋 상태: 투입중 자산의 배수기준(rsBase), 현금(rsCash), 투입금(rsInv)
-    let rsCash=0, rsInv=1, rsBaseV=null; const resetDays=[];
+    const days=[];
     ds.forEach(ymd=>{
       const seg=segKey(ymd);
       if(seg!==curSeg){
@@ -2405,29 +2442,10 @@ function blendDailySlots(results, active, wsum, years, forceNoReset){
       active.forEach((s,i)=>{ const rel=results[s].series[ymd]/segBase[i]; const contrib=wArr[i]*rel; v += contrib;
         const cr=(results[s].series._cashR&&results[s].series._cashR[ymd]!=null)?results[s].series._cashR[ymd]:0; vCash += contrib*cr; });
       v*=portBase; vCash*=portBase;  // 리밸런싱 반영된 "매매법 합산" 포트값 (연초=1)
-      let actual;   // 리셋 반영된 실제 자산
-      if(resetOn){
-        if(rsBaseV===null) rsBaseV=v;      // 이 구간 시작 v
-        const rel=v/rsBaseV;               // 구간 시작 대비 상대수익
-        actual = rsCash + rsInv*rel;       // 현금 + 투입분×상대수익
-        if(rel>=resetTarget){              // 목표 도달 → 현금화, 다음날 재투입
-          rsCash = actual*(1-resetReinv);
-          rsInv  = actual*resetReinv;
-          rsBaseV=v;                       // 리셋 당일 종가 기준으로 재투입 (다음날 등락부터 반영)
-          resetDays.push(ymd);
-        }
-      } else {
-        actual=v;
-      }
-      if(peak===null) peak=actual;
-      if(minVal===null) minVal=actual;
-      if(actual>peak) peak=actual;
-      if(actual<minVal) minVal=actual;
-      const dd=(actual-peak)/peak*100; if(dd<mdd) mdd=dd;
-      { const _inR=(v>0?vCash/v:0); const cashRatio=resetOn?((rsCash+rsInv*(v/(rsBaseV||v))*_inR)/actual):_inR; if(cashRatio<minCashR) minCashR=cashRatio; }
-      lastVal=actual;
+      days.push({ymd, actual:v, cashPct:v>0?vCash/v*100:0});
+      lastVal=v;
     });
-    port[y]={minCashPct:minCashR*100, ret:(lastVal-1)*100, mdd:mdd, maxRet:(peak-1)*100, minRet:(minVal-1)*100, resetDays:resetDays};
+    finalize(y, days, []);
   });
   return port;
 }
@@ -2494,7 +2512,7 @@ function resetAll(){ for(const k in DEFAULTS) document.getElementById(k).value=D
   renderWeights(); renderTw(); run(); }
 
 function runLive(){ try{ return _runLiveInner(); }catch(e){ const el=document.getElementById("live-result"); if(el) el.innerHTML='<div style="color:var(--neg);font-size:13px">계산 오류: '+(e&&e.message)+'</div>'; console.error(e); } }
-function computeLiveReset(act, startYmd, cap, target, reinv, wsum){
+function computeLiveReset(act, startYmd, cap, target, reinv, wsum, stopPct){
   const w=act.map(s=>slotById(s).w/wsum), isCash=act.map(s=>slotById(s).type==='cash');
   const breaks={};
   for(let it=0; it<40; it++){
@@ -2503,19 +2521,27 @@ function computeLiveReset(act, startYmd, cap, target, reinv, wsum){
     const all=Object.keys(res[act[0]].series).filter(x=>x>=startYmd&&act.every(s=>typeof res[s].series[x]==='number')).sort();
     if(!all.length) return null;
     let amt=w.map(v=>cap*v), cash=0, A=null, ref=null, invStart=1, curFy=null, prevTotal=cap, prevIv=cap, newB=null, V=null;
-    const curve=[], sells=[];
+    const curve=[], sells=[], stops=[]; let stopped=false, pk=null;
     for(let k=0;k<all.length;k++){
       const x=all[k], fy=fyOf(x), brs=breaks[fy]||[];
-      if(fy!==curFy){                       // 연초: 각 매매법 자기 금액으로 재시작, 리셋현금은 비중대로 재투입
+      if(fy!==curFy){                       // 연초: 각 매매법 자기 금액으로 재시작, 리셋·손절 현금은 비중대로 재투입
         if(curFy!==null) amt=V.slice();
+        stopped=false; pk=null;
         if(cash>0){ amt=amt.map((a,i)=>a+cash*w[i]); cash=0; }
         A=amt.slice(); ref=act.map(s=>res[s].series[x]); invStart=A.reduce((p,q)=>p+q,0); curFy=fy;
+      } else if(stopped){                   // 손절 후: 그해 남은 기간 현금 보유
+        curve.push({ymd:x, asset:cash, cash:cash}); prevTotal=cash; prevIv=0; continue;
       } else if(brs.includes(x)){           // 목표 도달 다음날: 전날 종가 전량매도분으로 재시작
         cash=cash+prevIv*(1-reinv); const inv=prevIv*reinv; A=w.map(v=>inv*v); ref=act.map(()=>1); invStart=inv;  // 투자분만 매도→재투입, 기존 현금 보관
       }
       V=A.map((a,i)=>a*res[act[i]].series[x]/ref[i]);
       let iv=0, ic=0; V.forEach((v,i)=>{ iv+=v; const cr=isCash[i]?1:((res[act[i]].series._cashR&&res[act[i]].series._cashR[x]!=null)?res[act[i]].series._cashR[x]:0); ic+=v*cr; });
       const total=iv+cash; prevTotal=total; prevIv=iv;
+      if(pk===null||total>pk) pk=total;
+      if(stopPct && (total-pk)/pk*100<=-stopPct){   // MDD 손절: 오늘 종가 전량매도 → 그해 종료
+        stopped=true; stops.push(x); cash=total; V=V.map(()=>0); A=A.map(()=>0);
+        curve.push({ymd:x, asset:total, cash:total}); continue;
+      }
       curve.push({ymd:x, asset:total, cash:ic+cash});
       const nx=all[k+1];
       if(invStart>0 && iv/invStart>=target && nx && fyOf(nx)===fy){
@@ -2523,7 +2549,7 @@ function computeLiveReset(act, startYmd, cap, target, reinv, wsum){
         if(!brs.includes(nx)){ newB=[fy,nx]; break; }
       }
     }
-    if(!newB){ const lastX=all[all.length-1]; return {res, curve, sells, V, cash, lastX, segR:act.map((s,i)=>res[s].series[lastX]/ref[i])}; }
+    if(!newB){ const lastX=all[all.length-1]; return {res, curve, sells, stops, stopped, V, cash, lastX, segR:act.map((s,i)=>stopped?null:res[s].series[lastX]/ref[i])}; }
     breaks[newB[0]]=(breaks[newB[0]]||[]).concat([newB[1]]).sort();
   }
   return null;
@@ -2545,20 +2571,21 @@ function _runLiveInner(){
   const {results, active}=window._cmp;
   const out=[]; const lastYmd=DATA[DATA.length-1][0]; const _dA={}, _dC={}, _dN={}; let _cashFixed=0;
   try{
-  if(_rsOn){
-    // ── 익절 리셋 반영(실전 연속): 목표 도달일 전량매도 → 다음날 매매법 재시작, 연초엔 확보현금 재투입 ──
+  const _stC=_stopCfg(); window._liveStops=null; window._liveStopped=false;
+  if(_rsOn||_stC.on){
+    // ── 익절 리셋 / MDD 손절 반영(실전 연속): 목표 도달일 전량매도 → 다음날 매매법 재시작, 연초엔 확보현금 재투입 ──
     const act=window._cmp.active.filter(s=>slotById(s));
     const tgt=1+((parseFloat((document.getElementById('resetTarget')||{}).value))||100)/100;
     const rnv=((parseFloat((document.getElementById('resetReinv')||{}).value))||40)/100;
-    const LR=computeLiveReset(act, startYmd, cap, tgt, rnv, wsum);
+    const LR=computeLiveReset(act, startYmd, cap, _rsOn?tgt:Infinity, rnv, wsum, _stC.on?_stC.pct:null);
     if(LR){
-      _rsCurve=LR.curve; _rsSells=LR.sells; _rsOut=[];
+      _rsCurve=LR.curve; _rsSells=_rsOn?LR.sells:null; _rsOut=[]; window._liveStops=_stC.on?LR.stops:null; window._liveStopped=LR.stopped;
       const price=(DATA.find(r=>r[0]===LR.lastX)||DATA[DATA.length-1])[1];
       act.forEach((s,i)=>{ const sl=slotById(s); const V=LR.V[i];
         const cr=sl.type==='cash'?1:((LR.res[s].series._cashR&&LR.res[s].series._cashR[LR.lastX]!=null)?LR.res[s].series._cashR[LR.lastX]:0);
         const c=V*cr, e=V-c;
-        _rsOut.push({slot:sl, alloc:cap*(sl.w/wsum), total:V, cash:c, eq:e, shares:e>0?Math.round(e/price):0, ret:(LR.segR[i]-1)*100}); });
-      if(LR.cash>0.5) _rsOut.push({slot:{name:'💰 익절 현금',w:'',type:'cash'}, alloc:0, total:LR.cash, cash:LR.cash, eq:0, shares:0, ret:null});
+        _rsOut.push({slot:sl, alloc:cap*(sl.w/wsum), total:V, cash:c, eq:e, shares:e>0?Math.round(e/price):0, ret:LR.segR[i]==null?null:(LR.segR[i]-1)*100}); });
+      if(LR.cash>0.5) _rsOut.push({slot:{name:LR.stopped?'🛑 손절 현금':'💰 익절 현금',w:'',type:'cash'}, alloc:0, total:LR.cash, cash:LR.cash, eq:0, shares:0, ret:null});
     }
   }
   // 각 슬롯: 시작일 이후 연도별 수익률을 복리로 누적 → 현재자산. 마지막 상태(현금/주식)는 _live에서
@@ -2613,6 +2640,7 @@ function renderLive(results, cap, startYmd, lastYmd, curve, rsSells){
     <div style="flex:1;min-width:130px;background:var(--panel2);border-radius:10px;padding:12px"><div style="font-size:11px;color:var(--mut)">현금</div><div style="font-size:20px;font-weight:700">${fmt(totCash)}</div><div style="font-size:12px;color:var(--dim)">${(totCash/totAsset*100).toFixed(0)}%</div></div>
   </div>`;
   h+=`<div style="font-size:12px;color:var(--dim);margin-bottom:8px">${fmtY(startYmd)} 시작 · ${fmtY(lastYmd)} 기준 · SOXL 종가 $${lastPrice}</div>`;
+  if(window._liveStops){ const st=window._liveStops; h+=`<div style="font-size:12px;margin-bottom:8px;padding:6px 10px;border-radius:6px;background:var(--panel2);color:var(--neg)">🛑 MDD 손절 반영 — ${st.length?('손절(전량매도·그해 종료): '+st.map(z=>'20'+z.slice(0,2)+'.'+z.slice(2,4)+'.'+z.slice(4,6)).join(', ')):'기간 중 손절 없음'}${window._liveStopped?' · <b>현재 손절 상태(다음 회계연도에 재시작)</b>':''}</div>`; }
   if(rsSells){ h+=`<div style="font-size:12px;margin-bottom:8px;padding:6px 10px;border-radius:6px;background:var(--panel2)">💰 익절 리셋 반영 — ${rsSells.length?('전량매도·재시작: '+rsSells.map(z=>'20'+z.slice(0,2)+'.'+z.slice(2,4)+'.'+z.slice(4,6)).join(', ')):'기간 중 리셋 없음'}<br><span style="color:var(--mut);font-size:11px">매매법별 수익률은 마지막 재시작(또는 연초) 이후 기준, 배정액은 처음 비중 기준</span></div>`; }
   h+=`<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:1px solid var(--line);color:var(--dim);font-size:11px">
     <th style="text-align:left;padding:6px">매매법</th><th style="text-align:right;padding:6px">배정액</th><th style="text-align:right;padding:6px">현재자산</th><th style="text-align:right;padding:6px">수익률</th><th style="text-align:right;padding:6px">주식평가</th><th style="text-align:right;padding:6px">보유주식</th><th style="text-align:right;padding:6px">현금</th></tr></thead><tbody>`;
@@ -3186,7 +3214,9 @@ function saveAll(){
   }
   const reset={ on:(document.getElementById('resetOn')||{}).checked||false, tgt:(document.getElementById('resetTarget')||{}).value, reinv:(document.getElementById('resetReinv')||{}).value };
   const view={ startMonth:START_MONTH, drOn:(document.getElementById('dr-on')||{}).checked||false, drY0:(document.getElementById('dr-y0')||{}).value, drY1:(document.getElementById('dr-y1')||{}).value };
-  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, reset, view, savedAt, deletedSlots:DELETED_SLOTS.slice(-200)};
+  const live={ cap:(document.getElementById('live-cap')||{}).value, date:(document.getElementById('live-date')||{}).value };
+  const stop={ on:(document.getElementById('stopOn')||{}).checked||false, pct:(document.getElementById('stopPct')||{}).value };
+  const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, reset, stop, view, live, savedAt, deletedSlots:DELETED_SLOTS.slice(-200)};
   try{ ls.setItem(LS_KEY, JSON.stringify(payload)); }catch(e){}
   wsStoreActive(payload); // 현재 설정 탭에도 자동저장
   if(_initDone && !_applying) cloudSchedulePush(); // 클라우드 자동 업로드 (디바운스)
@@ -3228,6 +3258,9 @@ function loadAll(){
     if(rt&&rs.tgt!=null&&rs.tgt!=='') rt.value=rs.tgt;
     if(rv&&rs.reinv!=null&&rs.reinv!=='') rv.value=rs.reinv;
     if(rr) rr.style.display=(ro&&ro.checked)?'flex':'none'; }
+  // MDD 손절 복원
+  { const so=document.getElementById('stopOn'), sp=document.getElementById('stopPct'), sr=document.getElementById('stopRow'); const st=d.stop||{on:false};
+    if(so) so.checked=!!st.on; if(sp&&st.pct!=null&&st.pct!=='') sp.value=st.pct; if(sr) sr.style.display=(so&&so.checked)?'flex':'none'; }
   // 시작월·날짜구간 복원 (설정탭별 독립)
   { const vw=d.view||{};
     if(vw.startMonth!=null){ START_MONTH=parseInt(vw.startMonth)||1; const sm=document.getElementById('startMonth'); if(sm) sm.value=String(START_MONTH); }
@@ -3236,6 +3269,9 @@ function loadAll(){
     const y0=document.getElementById('dr-y0'), y1=document.getElementById('dr-y1');
     if(y0&&vw.drY0!=null&&vw.drY0!=='') y0.value=vw.drY0;
     if(y1&&vw.drY1!=null&&vw.drY1!=='') y1.value=vw.drY1; }
+  // 실전현황 시작일·시작자산 복원
+  { const lv=d.live||{}; const lc=document.getElementById('live-cap'), ld=document.getElementById('live-date');
+    if(lc&&lv.cap) lc.value=lv.cap; if(ld&&lv.date) ld.value=lv.date; }
   return true;
 }
 
