@@ -193,12 +193,12 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v62 · BH수익률</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v67 · 비중정수</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
     <button class="on" data-m="backtest" onclick="switchMode('backtest')">백테스트</button>
-    <button data-m="trade" onclick="switchMode('trade')" style="display:none">매매시트</button>
+    
   </div>
 
   <div id="mode-backtest">
@@ -231,6 +231,7 @@
     <button data-v="compare" id="tab-compare" onclick="switchView('compare')" style="display:none">비교</button>
     <button data-v="journal" id="tab-journal" onclick="switchView('journal')">매매일지</button>
     <button data-v="data" onclick="switchView('data')">데이터 보기</button>
+    <button data-v="live" onclick="switchView('live')">💼 실전현황</button>
   </div>
 
   <div id="view-back">
@@ -441,6 +442,19 @@
       <div class="chart" style="height:240px"><svg id="pricechart" viewBox="0 0 800 210" preserveAspectRatio="none"></svg></div>
     </div>
   </div>
+  <div id="view-live" style="display:none">
+    <div class="panel">
+      <div class="panel-h">💼 실전 매매 현황</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:14px">시작 자산·시작일·매매법 비율을 넣으면, 그 날부터 지금까지 매매했을 때의 현황입니다. 각 매매법은 매년(시작월 기준) 그 시점 자산으로 리셋 재시작, 연도별 수익을 복리로 누적합니다.</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+        <label style="font-size:13px">시작 자산($) <input type="number" id="live-cap" value="450000" step="10000" style="width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
+        <label style="font-size:13px">시작일 <input type="date" id="live-date" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
+        <button onclick="runLive()" style="padding:8px 18px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer">현황 계산</button>
+      </div>
+      <div style="font-size:12px;color:var(--mut);margin-bottom:8px">※ 매매법 비율은 아래 백테스트 설정의 현재 비중을 그대로 사용합니다.</div>
+      <div id="live-result"></div>
+    </div>
+  </div>
   </div><!-- /mode-backtest -->
 
   <div id="mode-trade" style="display:none">
@@ -483,7 +497,8 @@
 var VIRTUAL_END='100310';
 function isVirtualYear(y){ const yr=typeof y==='number'?y:parseInt(y); return yr<=2010; }
 var START_MONTH = 1;  // 회계연도 시작월 (1=1월 디폴트)
-function fyOf(ymd){  // 그 날짜가 속한 회계연도 (시작월 이전이면 연도-1)
+function fyOf(ymd){ if(window.LIVE_CONTINUOUS) return 9999; // 실전현황 연속모드: 리셋없이
+  // 그 날짜가 속한 회계연도 (시작월 이전이면 연도-1)
   var y=2000+parseInt(ymd.slice(0,2)), m=parseInt(ymd.slice(2,4));
   return (m>=START_MONTH) ? y : y-1;
 }
@@ -673,7 +688,7 @@ function runDual(rows, P){
     }
     let holdSh=0; for(let k=0;k<nA;k++) if(aocc[k])holdSh+=ash[k];
     for(let k=0;k<nD;k++) if(docc[k])holdSh+=dsh[k];
-    daily.push({ymd:rows[i][0], year:years[i], asset:cash+holdSh*close, cash:cash});
+    daily.push({ymd:rows[i][0], year:years[i], asset:cash+holdSh*close, cash:cash, shares:holdSh, eq:holdSh*close});
     prevCash=cash;
     prevMocDay=hasMoc;
   }
@@ -803,7 +818,7 @@ function aggregate(daily, initCap){
     const ret=(end/initCap-1)*100; let peak=initCap,mdd=0,minAsset=initCap;
     a.forEach(d=>{ const v=d.asset; if(v>peak)peak=v; const dd=(v-peak)/peak*100; if(dd<mdd)mdd=dd;
       if(v<minAsset)minAsset=v;
-      series[d.ymd]=v/initCap; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cash!==undefined&&v>0?d.cash/v:1); });
+      series[d.ymd]=v/initCap; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cash!==undefined&&v>0?d.cash/v:1); if(!series._live)series._live={}; series._live[d.ymd]={cash:(d.cash||0), shares:(d.shares||0), eq:(d.eq||0), total:v}; });
     const maxRet=(peak/initCap-1)*100;  // 연중 최고 수익률
     const minRet=(minAsset/initCap-1)*100;  // 연중 최저 수익률
     yearly[y]={ret:ret,mdd:mdd,maxRet:maxRet,minRet:minRet}; });
@@ -828,7 +843,7 @@ function runDongpa(rows, P){
     const fi=firstIdxOfYear[y];
     if(fi>0) prevYearClose=rows[fi-1][1];
     const r=backtestYear(byYear[y],P,tlog,prevYearClose); yearly[y]={ret:r.ret,mdd:r.mdd,maxRet:r.maxRet,minRet:r.minRet};
-    r.series.forEach(d=>{ series[d.ymd]=d.mult; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cashR!==undefined?d.cashR:1); }); });
+    r.series.forEach(d=>{ series[d.ymd]=d.mult; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cashR!==undefined?d.cashR:1); if(!series._live)series._live={}; series._live[d.ymd]={cash:(d._cash||0),shares:(d._shares||0),eq:(d._eq||0),total:(d._total||0)}; }); });
   return {yearly, years, series, tlog};
 }
 // ===== 동파 + 세컨 결합 엔진 =====
@@ -846,7 +861,7 @@ function runDongpaSecond(rows, P, wMainFrac, wSecFrac){
     const r=btYearSecond(byYear[y],P,tlog,pyc,wMainFrac,wSecFrac);
     yearly[y]={ret:r.ret,mdd:r.mdd,maxRet:r.maxRet,minRet:r.minRet};
     if(r.secStartYmd) secStart[y]=r.secStartYmd;
-    r.series.forEach(d=>{ series[d.ymd]=d.mult; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cashR!==undefined?d.cashR:1); }); });
+    r.series.forEach(d=>{ series[d.ymd]=d.mult; if(!series._cashR)series._cashR={}; series._cashR[d.ymd]=(d.cashR!==undefined?d.cashR:1); if(!series._live)series._live={}; series._live[d.ymd]={cash:(d._cash||0),shares:(d._shares||0),eq:(d._eq||0),total:(d._total||0)}; }); });
   return {yearly, years, series, tlog, secStart};
 }
 // 한 해 안에서 메인+세컨을 동시에 시뮬레이션
@@ -994,7 +1009,7 @@ function backtestYear(items,P,tlog,prevYearClose){
     if(total>peak) peak=total;
     if(total<minTotal) minTotal=total;
     if(peak>0){ const dd=(peak-total)/peak*100; if(dd>maxDD) maxDD=dd; }
-    series.push({ymd:items[day].r[0], mult:total/P.initCap, cashR:(total>0?cash/total:1)});
+    series.push({ymd:items[day].r[0], mult:total/P.initCap, cashR:(total>0?cash/total:1), _cash:cash, _shares:(function(){let s=0;for(const t in positions)s+=(positions[t].sh||0);return s;})(), _eq:holdVal, _total:total});
     prevClose=price;
   }
   // 마지막 청산
@@ -1066,7 +1081,7 @@ function runDropf(rows, P){
     if(total>peak) peak=total;
     if(total<ymin) ymin=total;
     const dd=peak>0?(peak-total)/peak:0; if(dd>ymdd) ymdd=dd;
-    series[rows[i][0]]=total/yStart; if(!series._cashR)series._cashR={}; series._cashR[rows[i][0]]=(total>0?cash/total:1);
+    series[rows[i][0]]=total/yStart; if(!series._cashR)series._cashR={}; series._cashR[rows[i][0]]=(total>0?cash/total:1); if(!series._live)series._live={}; series._live[rows[i][0]]={cash:cash, shares:inv.reduce((a,p)=>a+p.qty,0), eq:eq, total:total};
   }
   let gross=0; inv.forEach(p=>gross+=p.qty*closes[n-1]);
   const eq=gross-gross*TOTAL_SELL_FEE; const endAsset=trunc2(cash+eq+EPS3);
@@ -1153,7 +1168,7 @@ function runThree(rows, P){
     if(total>peak) peak=total;
     if(total<ymin) ymin=total;
     const dd=peak>0?(peak-total)/peak:0; if(dd>ymdd) ymdd=dd;
-    series[rows[i][0]]=total/yStart; if(!series._cashR)series._cashR={}; series._cashR[rows[i][0]]=(total>0?cash/total:1);
+    series[rows[i][0]]=total/yStart; if(!series._cashR)series._cashR={}; series._cashR[rows[i][0]]=(total>0?cash/total:1); if(!series._live)series._live={}; series._live[rows[i][0]]={cash:cash, shares:inv.reduce((a,p)=>a+p.qty,0), eq:eq, total:total};
   }
   // 마지막연도
   let gross=0; inv.forEach(p=>gross+=p.qty*closes[n-1]);
@@ -1421,6 +1436,7 @@ function removeSlot(id){
   DELETED_SLOTS.push(id); SLOTS.splice(i,1); rebalanceWeights(); renderWeights(); run();
 }
 function renderWeights(){
+  { const _on=(typeof activeSlots==='function')?activeSlots():[]; if(_on.some(k=>k.w!==Math.round(k.w))){ const _t=Math.round(_on.reduce((a,k)=>a+k.w,0)); _intSplit(_on,_t); } }
   const on=activeSlots();
   if(on.length===1){ on[0].w=100; }
   const box=document.getElementById("weights");
@@ -1566,7 +1582,6 @@ function presetAdd(slotId){
   o.types[sl.type].push({id, name:name.trim(), p:slotEffectiveParams(sl)});
   putPresetStore(o);
   sl.presetId=id; saveAll(); openSlotParams(slotId); renderWeights(); run();
-  if(typeof cloudPush==='function' && _initDone) cloudPush(); // 프리셋 저장 즉시 클라우드 업로드
 }
 function presetEdit(slotId, presetId){
   const sl=slotById(slotId); if(!sl) return;
@@ -1903,17 +1918,24 @@ function setSlotTwdg(id,i,val,nN){ const sl=slotById(id); if(!sl)return; if(!sl.
   while(a.length<nN)a.push(eq); if(a.length>nN)a=a.slice(0,nN);
   a[i]=parseFloat(val)||0; sl.params['g_tw']=a; saveAll(); openSlotParams(id); renderWeights(); }
 function resetSlotParams(id){ const sl=slotById(id); if(sl){ sl.params={}; sl.presetId=null; saveAll(); openSlotParams(id); renderWeights(); } }
-function setW(id,v){ const sl=slotById(id); if(sl) sl.w=parseFloat(v)||0; updateSum(); run(); }
+function setW(id,v){ const sl=slotById(id); if(sl) sl.w=Math.round(parseFloat(v)||0); updateSum(); run(); }
+function _intSplit(list, total){ // list 각 k.w(실수)를 정수로, 합=total 유지
+  const fl=list.map(k=>Math.floor(k.w)); let rem=total-fl.reduce((a,b)=>a+b,0);
+  const ord=list.map((k,i)=>[k.w-Math.floor(k.w),i]).sort((a,b)=>b[0]-a[0]);
+  for(let t=0;t<ord.length&&rem>0;t++){ fl[ord[t][1]]++; rem--; }
+  list.forEach((k,i)=>k.w=fl[i]);
+}
 function setWslider(id,v,fromInput){
   const on=activeSlots(); const sl=slotById(id); if(!sl) return;
-  let nv=parseFloat(v)||0; if(nv<0)nv=0; if(nv>100)nv=100; sl.w=nv;
+  let nv=Math.round(parseFloat(v)||0); if(nv<0)nv=0; if(nv>100)nv=100; sl.w=nv;
   const others=on.filter(k=>k.id!==id);
   const remain=100-nv;
   if(others.length===1){ others[0].w=remain; }
   else if(others.length>=2){
     let osum=0; others.forEach(k=>osum+=k.w);
-    if(osum<=0){ const eq=remain/others.length; others.forEach(k=>k.w=eq); }
+    if(osum<=0){ const eq=remain/others.length; others.forEach(k=>k.w=eq); _intSplit(others, remain); }
     else { others.forEach(k=>k.w=remain*(k.w/osum)); }
+    _intSplit(others, remain);
   }
   on.forEach(k=>{ // 입력칸 값 갱신 (지금 타자 치는 칸은 건드리지 않음)
     const inp=document.getElementById('wval-'+k.id);
@@ -2072,7 +2094,10 @@ function initDateRange(){
   const s0=document.getElementById("dr-y0"), s1=document.getElementById("dr-y1");
   let o0="",o1="";
   for(let y=DATA_Y0;y<=DATA_Y1;y++){ o0+=`<option value="${y}">${y}</option>`; o1+=`<option value="${y}">${y}</option>`; }
-  s0.innerHTML=o0; s1.innerHTML=o1; s0.value=BACKTEST_Y0; s1.value=DATA_Y1;
+  const _p0=s0.value, _p1=s1.value;
+  s0.innerHTML=o0; s1.innerHTML=o1;
+  s0.value=(_p0&&+_p0>=DATA_Y0&&+_p0<=DATA_Y1)?_p0:BACKTEST_Y0;
+  s1.value=(_p1&&+_p1>=DATA_Y0&&+_p1<=DATA_Y1)?_p1:DATA_Y1;
   document.getElementById("dr-hint").textContent=`(전체 ${DATA_Y0}~${DATA_Y1} · 데이터 ${DATA_LAST_DATE}까지)`;
 }
 function getYearRange(){
@@ -2404,9 +2429,136 @@ function resetAll(){ for(const k in DEFAULTS) document.getElementById(k).value=D
   TW={SF:[...TW_DEFAULT.SF],Middle:[...TW_DEFAULT.Middle],AG:[...TW_DEFAULT.AG]};
   renderWeights(); renderTw(); run(); }
 
+function runLive(){ try{ return _runLiveInner(); }catch(e){ const el=document.getElementById("live-result"); if(el) el.innerHTML='<div style="color:var(--neg);font-size:13px">계산 오류: '+(e&&e.message)+'</div>'; console.error(e); } }
+function _runLiveInner(){
+  const cap=parseFloat(document.getElementById('live-cap').value)||450000;
+  const dstr=document.getElementById('live-date').value;
+  if(!dstr){ document.getElementById('live-result').innerHTML='<div style="color:var(--neg)">시작일을 선택하세요.</div>'; return; }
+  const startYmd=dstr.slice(2).replace(/-/g,'');
+  const slots=SLOTS.filter(s=>s.on&&s.w>0);
+  if(!slots.length){ document.getElementById('live-result').innerHTML='<div style="color:var(--neg)">백테스트 탭에서 매매법을 켜고 비중을 설정하세요.</div>'; return; }
+  const wsum=slots.reduce((a,s)=>a+s.w,0);
+  // 시작일의 월을 리셋 기준월로 임시 적용 → 시작일에 신규 진입과 동일
+  const _smBak=START_MONTH; START_MONTH=parseInt(dstr.slice(5,7))||1; run();
+  const {results, active}=window._cmp;
+  const out=[]; const lastYmd=DATA[DATA.length-1][0]; const _dA={}, _dC={}, _dN={}; let _cashFixed=0;
+  try{
+  // 각 슬롯: 시작일 이후 연도별 수익률을 복리로 누적 → 현재자산. 마지막 상태(현금/주식)는 _live에서
+  slots.forEach(s=>{
+    const alloc=cap*(s.w/wsum);
+    // 슬롯 series·_live 찾기
+    let sid=active.find(a=>slotById(a)===s||slotById(a).id===s.id);
+    if(s.type==='cash'||!sid){ _cashFixed+=alloc; out.push({slot:s, alloc, total:alloc, cash:alloc, eq:0, shares:0, ret:0}); return; }
+    const ser=results[sid].series;
+    // 시작일 이후 날짜들
+    const ymds=Object.keys(ser).filter(x=>x>=startYmd&&x!=='_cashR'&&x!=='_live'&&typeof ser[x]==='number').sort();
+    if(!ymds.length){ out.push({slot:s, alloc, total:alloc, cash:alloc, eq:0, shares:0, ret:0}); return; }
+    // 연도별 복리: 각 회계연도 내 (끝/시작) 배수를 곱함. series는 연초=1 리셋값
+    const fyList=[...new Set(ymds.map(x=>fyOf(x)))].sort();
+    let mult=1;
+    fyList.forEach(fy=>{
+      const yy=ymds.filter(x=>fyOf(x)===fy);
+      const first=ser[yy[0]], last=ser[yy[yy.length-1]];
+      if(first>0){ yy.forEach(x=>{ const a=alloc*mult*(ser[x]/first); const cr=(ser._cashR&&ser._cashR[x]!=null)?ser._cashR[x]:0;
+        _dA[x]=(_dA[x]||0)+a; _dC[x]=(_dC[x]||0)+a*cr; _dN[x]=(_dN[x]||0)+1; });
+        mult*=(last/first); }
+    });
+    const total=alloc*mult;
+    // 마지막 상태(현금/주식 비율)는 _live[마지막ymd] 기준, 현재 total에 스케일
+    const live=ser._live||{};
+    const lastL=live[ymds[ymds.length-1]];
+    const cashR=(lastL&&lastL.total>0)?lastL.cash/lastL.total:0;
+    const cash=total*cashR; const eq=total-cash;
+    // 보유주식수: 마지막날 주식평가 / 마지막 SOXL종가
+    const lastPrice=DATA[DATA.length-1][1];
+    const realShares=eq>0?Math.round(eq/lastPrice):0;
+    out.push({slot:s, alloc, total, cash, eq, shares:realShares, ret:(total/alloc-1)*100});
+  });
+  } finally { START_MONTH=_smBak; run(); switchView('live'); }
+  const _nInv=out.filter(o=>o.slot.type!=='cash'&&o.eq!==undefined).length - out.filter(o=>o.slot.type==='cash').length*0;
+  const _need=Math.max(...Object.values(_dN),0);
+  const curve=Object.keys(_dA).filter(x=>_dN[x]===_need).sort().map(x=>({ymd:x, asset:_dA[x]+_cashFixed, cash:_dC[x]+_cashFixed}));
+  renderLive(out, cap, startYmd, lastYmd, curve);
+}
+// 슬롯 하나를 연속으로 돌려 마지막 상태 추출
+function renderLive(results, cap, startYmd, lastYmd, curve){
+  const fmt=n=>'$'+Math.round(n).toLocaleString();
+  const fmtY=y=>'20'+y.slice(0,2)+'.'+y.slice(2,4)+'.'+y.slice(4,6);
+  let totAsset=0, totCash=0, totEq=0;
+  results.forEach(r=>{ totAsset+=r.total; totCash+=r.cash; totEq+=r.eq; });
+  const totRet=(totAsset/cap-1)*100;
+  const lastPrice=DATA[DATA.length-1][1];
+  let h=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="flex:1;min-width:130px;background:var(--panel2);border-radius:10px;padding:12px"><div style="font-size:11px;color:var(--mut)">총 자산</div><div style="font-size:20px;font-weight:700">${fmt(totAsset)}</div><div style="font-size:12px;color:${totRet>=0?'var(--pos)':'var(--neg)'}">${totRet>=0?'+':''}${totRet.toFixed(1)}%</div></div>
+    <div style="flex:1;min-width:130px;background:var(--panel2);border-radius:10px;padding:12px"><div style="font-size:11px;color:var(--mut)">주식 평가</div><div style="font-size:20px;font-weight:700">${fmt(totEq)}</div><div style="font-size:12px;color:var(--dim)">${(totEq/totAsset*100).toFixed(0)}%</div></div>
+    <div style="flex:1;min-width:130px;background:var(--panel2);border-radius:10px;padding:12px"><div style="font-size:11px;color:var(--mut)">현금</div><div style="font-size:20px;font-weight:700">${fmt(totCash)}</div><div style="font-size:12px;color:var(--dim)">${(totCash/totAsset*100).toFixed(0)}%</div></div>
+  </div>`;
+  h+=`<div style="font-size:12px;color:var(--dim);margin-bottom:8px">${fmtY(startYmd)} 시작 · ${fmtY(lastYmd)} 기준 · SOXL 종가 $${lastPrice}</div>`;
+  h+=`<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:1px solid var(--line);color:var(--dim);font-size:11px">
+    <th style="text-align:left;padding:6px">매매법</th><th style="text-align:right;padding:6px">배정액</th><th style="text-align:right;padding:6px">현재자산</th><th style="text-align:right;padding:6px">수익률</th><th style="text-align:right;padding:6px">주식평가</th><th style="text-align:right;padding:6px">보유주식</th><th style="text-align:right;padding:6px">현금</th></tr></thead><tbody>`;
+  const NAME={dual:'듀얼',dongpa:'동파',three:'3모드',dropf:'떨프',cash:'현금'};
+  results.forEach(r=>{
+    const nm=r.slot.name||NAME[r.slot.type]||r.slot.type;
+    h+=`<tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:6px;text-align:left">${nm} <span style="font-size:10px;color:var(--mut)">${r.slot.w}%</span></td>
+      <td style="padding:6px;text-align:right">${fmt(r.alloc)}</td>
+      <td style="padding:6px;text-align:right;font-weight:600">${fmt(r.total)}</td>
+      <td style="padding:6px;text-align:right;color:${r.ret>=0?'var(--pos)':'var(--neg)'}">${r.ret>=0?'+':''}${r.ret.toFixed(1)}%</td>
+      <td style="padding:6px;text-align:right">${fmt(r.eq)}</td>
+      <td style="padding:6px;text-align:right">${Math.round(r.shares).toLocaleString()}주</td>
+      <td style="padding:6px;text-align:right">${fmt(r.cash)}</td></tr>`;
+  });
+  h+=`</tbody></table>`;
+  if(curve&&curve.length>1) h=_liveChart(curve, cap)+h;
+  document.getElementById('live-result').innerHTML=h;
+}
+function _liveChart(curve, cap){
+  const W=720,H=240,pL=62,pR=12,pT=14,pB=28;
+  const vals=curve.map(p=>p.asset); const mx=Math.max(...vals,cap), mn=Math.min(...vals.concat(curve.map(p=>p.cash)),0);
+  const x=i=>pL+(W-pL-pR)*i/(curve.length-1), y=v=>pT+(H-pT-pB)*(1-(v-mn)/((mx-mn)||1));
+  let pa='',pc='',ca='';
+  curve.forEach((p,i)=>{ pa+=(i?'L':'M')+x(i).toFixed(1)+','+y(p.asset).toFixed(1)+' '; pc+=(i?'L':'M')+x(i).toFixed(1)+','+y(p.cash).toFixed(1)+' '; });
+  ca=pc+`L${x(curve.length-1).toFixed(1)},${y(mn).toFixed(1)} L${x(0).toFixed(1)},${y(mn).toFixed(1)} Z`;
+  // MDD (자산 기준)
+  let pk=curve[0].asset, mdd=0, mddI=0; curve.forEach((p,i)=>{ if(p.asset>pk)pk=p.asset; const d=(p.asset-pk)/pk*100; if(d<mdd){mdd=d;mddI=i;} });
+  const fmtK=v=>v>=1e6?'$'+(v/1e6).toFixed(2)+'M':(v<500?'$0':'$'+Math.round(v/1e3)+'k');
+  let grid=''; for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4; grid+=`<line x1="${pL}" y1="${y(v).toFixed(0)}" x2="${W-pR}" y2="${y(v).toFixed(0)}" stroke="var(--line)" stroke-width="0.5"/><text x="${pL-4}" y="${(y(v)+3).toFixed(0)}" font-size="9" fill="var(--mut)" text-anchor="end">${fmtK(v)}</text>`; }
+  // x 라벨 (연도 바뀔 때)
+  let xl=''; let prevY=''; curve.forEach((p,i)=>{ const yy=p.ymd.slice(0,2); const mm=p.ymd.slice(2,4); const key=curve.length>300?yy:yy+mm; if(key!==prevY){ prevY=key; xl+=`<text x="${x(i).toFixed(0)}" y="${H-8}" font-size="9" fill="var(--mut)" text-anchor="middle">${curve.length>300?'20'+yy:yy+'.'+mm}</text>`; } });
+  const capY=y(cap).toFixed(0);
+  const last=curve[curve.length-1];
+  return `<div style="font-size:12px;font-weight:600;margin-bottom:4px">📈 자산 추이 (전체) — 시작 ${fmtK(cap)} → 현재 ${fmtK(last.asset)} · 최대낙폭 ${mdd.toFixed(1)}%</div>
+  <div style="font-size:11px;margin-bottom:4px;display:flex;gap:12px"><span style="color:var(--accent2)">━ 총자산</span><span style="color:#2980b9">▒ 현금</span><span style="color:var(--mut)">┄ 시작자산</span></div>
+  <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin-bottom:14px">${grid}
+    <path d="${ca}" fill="rgba(41,128,185,0.15)" stroke="none"/>
+    <line x1="${pL}" y1="${capY}" x2="${W-pR}" y2="${capY}" stroke="var(--mut)" stroke-dasharray="4,3" stroke-width="1"/>
+    <path d="${pa}" fill="none" stroke="var(--accent2)" stroke-width="2"/>
+    <circle cx="${x(mddI).toFixed(1)}" cy="${y(curve[mddI].asset).toFixed(1)}" r="3" fill="var(--neg)"/>
+    ${xl}</svg>`;
+}
+function runSlotLive(slot, subRows, alloc, si){
+  const typ=slot.type;
+  if(typ==='cash'){ return {cash:alloc, shares:0, eq:0, total:alloc, ret:0}; }
+  const fee=getFeeRate();
+  let res=withSlotParams(slot, ()=>{
+    if(typ==='dual'){ const dp=dualP(); dp.initCap=alloc; dp.fee=fee; return runDual(subRows, dp); }
+    if(typ==='dongpa'){ const dp=dongpaP(); dp.initCap=alloc; dp.fee=fee; return runDongpa(subRows, dp); }
+    if(typ==='three'){ const tp=threeP(); tp.initCap=alloc; tp.fee=fee; return runThree(subRows, tp); }
+    if(typ==='dropf'){ const dp=dropfP(); dp.initCap=alloc; dp.fee=fee; return runDropf(subRows, dp); }
+    return null;
+  });
+  if(!res){ return {cash:alloc, shares:0, eq:0, total:alloc, ret:0}; }
+  const live=res.series._live||{};
+  const ymds=Object.keys(live).sort();
+  const last=ymds.length?live[ymds[ymds.length-1]]:{cash:alloc,shares:0,eq:0,total:alloc};
+  const total=last.total||alloc;
+  return {cash:last.cash||0, shares:last.shares||0, eq:last.eq||(total-(last.cash||0)), total:total, ret:(total/alloc-1)*100, lastYmd:ymds.length?ymds[ymds.length-1]:null};
+}
 function switchView(v){ document.querySelectorAll(".viewtabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
   document.getElementById("view-back").style.display=v==="back"?"block":"none";
   document.getElementById("view-data").style.display=v==="data"?"block":"none";
+  const _vl=document.getElementById("view-live"); if(_vl) _vl.style.display=v==="live"?"block":"none";
+  if(v==="live"){ const _ld=document.getElementById("live-date"); if(_ld&&!_ld.value){ _ld.value="2024-01-02"; } if(!window._liveBusy){ setTimeout(()=>{ window._liveBusy=true; try{ runLive(); }finally{ window._liveBusy=false; } },0); } }
   document.getElementById("view-compare").style.display=v==="compare"?"block":"none";
   document.getElementById("view-journal").style.display=v==="journal"?"block":"none";
   if(v==="compare") renderCompare();
@@ -2762,6 +2914,7 @@ async function cloudPush(){
   _cloudBusy=false; return ok;
 }
 // ── ☁ 전체 저장: 현재 상태(파라미터·프리셋·매매법 설정)를 최종본으로 확정. 다른 기기는 새로고침/30초내 이걸 그대로 받음 ──
+function _snapTime(t){ const d=new Date(t); return (d.getMonth()+1)+'/'+d.getDate()+' '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
 async function cloudSaveAll(){
   const prof=cloudProfile(); if(!cloudOn()||!prof){ alert('동기화 코드(hs1 등)를 먼저 설정하세요.'); return; }
   setSyncStatus('☁ 전체 저장중…','#b07d0a');
@@ -2769,6 +2922,17 @@ async function cloudSaveAll(){
   if(_cloudBusy){ alert('동기화가 오래 걸리고 있습니다. 잠시 후 다시 눌러주세요.'); return; }
   _cloudBusy=true;
   try{
+    // 다른 기기가 이 기기 이후에 저장했는지 확인 (옛 화면으로 덮어쓰기 방지)
+    let _row=null; try{ _row=await cloudFetch(); }catch(e){ _row=null; }
+    const _C=bundleFromRow(_row);
+    if(_C && _C.snapshotAt && _C.snapshotAt!==localSnapAt()){
+      const ok=confirm('⚠ 다른 기기에서 '+_snapTime(_C.snapshotAt)+'에 저장한 최신본이 클라우드에 있습니다.\n\n[확인] 지금 이 화면 설정으로 덮어쓰기\n[취소] 덮어쓰지 않고 그 최신본 불러오기');
+      if(!ok){
+        writeLocalBundle({active:_C.active, sets:_C.sets, presets:_C.presets}); setLocalSnapAt(_C.snapshotAt);
+        applyLocalToUI(); setSyncStatus('☁ 최종본 불러옴 '+_snapTime(_C.snapshotAt)+' ('+prof+')','#1565c0');
+        _cloudBusy=false; return;
+      }
+    }
     saveAll();                                   // 화면의 현재 값을 로컬에 먼저 반영
     if(_cloudTimer){ clearTimeout(_cloudTimer); _cloudTimer=null; } // 예약된 자동업로드 취소(스냅샷이 최종)
     const b=readLocalBundle(); const t=Date.now();
@@ -2866,12 +3030,13 @@ async function cloudInit(){
     const C=bundleFromRow(row);
     _initDone=true;
     // 페이지 로드시: 클라우드에 '전체 저장' 최종본이 로컬보다 새로우면 그것만 받아 적용. 자동 업로드는 안 함.
-    if(C && (C.snapshotAt||0) > localSnapAt()){
+    // 기기 시계 차이 무관: 클라우드 최종본 ID가 이 기기가 마지막으로 저장/수신한 ID와 다르면 = 다른 기기가 새로 저장한 것 → 받음
+    if(C && C.snapshotAt && C.snapshotAt !== localSnapAt()){
       writeLocalBundle({active:C.active, sets:C.sets, presets:C.presets}); setLocalSnapAt(C.snapshotAt);
       applyLocalToUI();
-      setSyncStatus('☁ 최종본 불러옴 ('+cloudProfile()+')','#1565c0');
+      setSyncStatus('☁ 최종본 불러옴 '+_snapTime(C.snapshotAt)+' ('+cloudProfile()+')','#1565c0');
     } else {
-      setSyncStatus('☁ 준비됨 ('+cloudProfile()+') · 전체 저장으로 올리기','#1565c0');
+      setSyncStatus('☁ 최신 상태 '+(localSnapAt()?_snapTime(localSnapAt())+' 저장본 ':'')+'('+cloudProfile()+')','#1565c0');
     }
   }catch(e){ _initDone=true; setSyncStatus('☁ 오프라인: '+(e&&e.message?e.message:e),'#c62828'); }
 }
