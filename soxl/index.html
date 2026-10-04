@@ -193,11 +193,12 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v75 · 가상실제분리</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v77 · 실전현황상단탭</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
     <button class="on" data-m="backtest" onclick="switchMode('backtest')">백테스트</button>
+    <button data-m="live" onclick="switchMode('live')">💼 실전현황</button>
     
   </div>
 
@@ -231,7 +232,6 @@
     <button data-v="compare" id="tab-compare" onclick="switchView('compare')" style="display:none">비교</button>
     <button data-v="journal" id="tab-journal" onclick="switchView('journal')">매매일지</button>
     <button data-v="data" onclick="switchView('data')">데이터 보기</button>
-    <button data-v="live" onclick="switchView('live')">💼 실전현황</button>
   </div>
 
   <div id="view-back">
@@ -450,20 +450,24 @@
       <div class="chart" style="height:240px"><svg id="pricechart" viewBox="0 0 800 210" preserveAspectRatio="none"></svg></div>
     </div>
   </div>
-  <div id="view-live" style="display:none">
+</div><!-- /mode-backtest -->
+
+  <div id="mode-live" style="display:none">
+  <div id="view-live">
     <div class="panel">
       <div class="panel-h">💼 실전 매매 현황</div>
-      <div style="font-size:12px;color:var(--dim);margin-bottom:14px">시작 자산·시작일·매매법 비율을 넣으면, 그 날부터 지금까지 매매했을 때의 현황입니다. 각 매매법은 매년(시작월 기준) 그 시점 자산으로 리셋 재시작, 연도별 수익을 복리로 누적합니다.</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:14px">백테스트 탭과 독립된 실전용 설정입니다. 매매법 비중·익절 리셋·손절·수수료를 여기서 따로 정하고, 시작일부터 지금까지 매매했을 때의 현황을 봅니다. (매매법 파라미터는 백테스트 슬롯의 프리셋을 그대로 사용)</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
         <label style="font-size:13px">시작 자산($) <input type="number" id="live-cap" value="450000" step="10000" onchange="saveAll();runLive()" style="width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
         <label style="font-size:13px">시작일 <input type="date" id="live-date" onchange="saveAll();runLive()" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></label>
         <button onclick="runLive()" style="padding:8px 18px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer">현황 계산</button>
       </div>
-      <div style="font-size:12px;color:var(--mut);margin-bottom:8px">※ 매매법 비율은 아래 백테스트 설정의 현재 비중을 그대로 사용합니다.</div>
+      <div id="live-cfg" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px"></div>
       <div id="live-result"></div>
     </div>
   </div>
-  </div><!-- /mode-backtest -->
+  
+  </div><!-- /mode-live -->
 
   <div id="mode-trade" style="display:none">
     <div class="accttabs">
@@ -2514,7 +2518,64 @@ function resetAll(){ for(const k in DEFAULTS) document.getElementById(k).value=D
   TW={SF:[...TW_DEFAULT.SF],Middle:[...TW_DEFAULT.Middle],AG:[...TW_DEFAULT.AG]};
   renderWeights(); renderTw(); run(); }
 
-function runLive(){ try{ return _runLiveInner(); }catch(e){ const el=document.getElementById("live-result"); if(el) el.innerHTML='<div style="color:var(--neg);font-size:13px">계산 오류: '+(e&&e.message)+'</div>'; console.error(e); } }
+
+// ===== 실전현황 전용 설정 (백테스트 탭과 독립) =====
+let LIVE_CFG=null;
+function _liveCfgFromBacktest(){
+  const g=id=>document.getElementById(id)||{};
+  const c={w:{}, on:{}, rs:{on:!!g('resetOn').checked, tgt:g('resetTarget').value||'100', reinv:g('resetReinv').value||'40'},
+    st:{on:!!g('stopOn').checked, pct:g('stopPct').value||'20'}, fee:{on:!!g('fee-on').checked, pct:g('fee-pct').value||'0.07'}};
+  SLOTS.forEach(s=>{ c.on[s.id]=!!s.on; c.w[s.id]=Math.round(s.w||0); });
+  return c;
+}
+function _liveCfg(){ if(!LIVE_CFG) LIVE_CFG=_liveCfgFromBacktest(); return LIVE_CFG; }
+function renderLiveCfg(){
+  const el=document.getElementById('live-cfg'); if(!el) return;
+  const c=_liveCfg(); const inp='padding:3px 5px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);font-size:12px;text-align:right';
+  let sum=0; SLOTS.forEach(s=>{ if(c.on[s.id]) sum+=(+c.w[s.id]||0); });
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:13px">실전 매매법 비중</b>
+    <span style="font-size:12px;color:${sum===100?'var(--pos)':'var(--neg)'}">합계 ${sum}%${sum===100?'':' (합계 기준으로 비례 배분)'}</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:8px">`;
+  SLOTS.forEach(s=>{ h+=`<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" ${c.on[s.id]?'checked':''} onchange="liveSet('on','${s.id}',this.checked)"> ${s.name}
+      <input type="number" step="1" min="0" max="100" value="${c.on[s.id]?(c.w[s.id]||0):0}" ${c.on[s.id]?'':'disabled'} onchange="liveSet('w','${s.id}',this.value)" style="width:48px;${inp}">%</label>`; });
+  h+=`</div><div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--dim);align-items:center">
+    <label><input type="checkbox" ${c.rs.on?'checked':''} onchange="liveSet('rs','on',this.checked)"> 💰 익절 리셋</label>
+    <span>목표 +<input type="number" step="10" value="${c.rs.tgt}" onchange="liveSet('rs','tgt',this.value)" style="width:50px;${inp}">% · 재투입 <input type="number" step="5" value="${c.rs.reinv}" onchange="liveSet('rs','reinv',this.value)" style="width:44px;${inp}">%</span>
+    <label><input type="checkbox" ${c.st.on?'checked':''} onchange="liveSet('st','on',this.checked)"> 🛑 MDD 손절</label>
+    <span>낙폭 <input type="number" step="1" value="${c.st.pct}" onchange="liveSet('st','pct',this.value)" style="width:44px;${inp}">%</span>
+    <label><input type="checkbox" ${c.fee.on?'checked':''} onchange="liveSet('fee','on',this.checked)"> 수수료</label>
+    <span><input type="number" step="0.01" value="${c.fee.pct}" onchange="liveSet('fee','pct',this.value)" style="width:50px;${inp}">%</span>
+    <button onclick="liveCopyBacktest()" style="margin-left:auto;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--ink);font-size:11px;cursor:pointer">백테스트 설정 가져오기</button></div>`;
+  el.innerHTML=h;
+}
+function liveSet(grp,key,val){
+  const c=_liveCfg();
+  if(grp==='on'){ c.on[key]=!!val; if(val&&!c.w[key]) c.w[key]=0; }
+  else if(grp==='w'){ c.w[key]=Math.max(0,Math.round(parseFloat(val)||0)); }
+  else { c[grp][key]=val; }
+  renderLiveCfg(); saveAll(); runLive();
+}
+function liveCopyBacktest(){ LIVE_CFG=_liveCfgFromBacktest(); renderLiveCfg(); saveAll(); runLive(); }
+// 실전 설정을 잠시 적용해 fn 실행 → 백테스트 설정 원상복구 (그 사이 저장 금지)
+function _withLiveContext(fn){
+  const c=_liveCfg(); const g=id=>document.getElementById(id);
+  const bak={sm:START_MONTH, slots:SLOTS.map(s=>({s, on:s.on, w:s.w})), dom:{}};
+  ['resetOn','resetTarget','resetReinv','stopOn','stopPct','fee-on','fee-pct','dr-on'].forEach(id=>{ const e=g(id); if(e) bak.dom[id]=(e.type==='checkbox')?e.checked:e.value; });
+  window._liveCtx=true; const _busyBak=window._liveBusy; window._liveBusy=true;
+  try{
+    SLOTS.forEach(s=>{ s.on=!!c.on[s.id]&&(+c.w[s.id]||0)>0; s.w=s.on?(+c.w[s.id]||0):0; });
+    const set=(id,v)=>{ const e=g(id); if(!e) return; if(e.type==='checkbox') e.checked=!!v; else e.value=v; };
+    set('resetOn',c.rs.on); set('resetTarget',c.rs.tgt); set('resetReinv',c.rs.reinv);
+    set('stopOn',c.st.on); set('stopPct',c.st.pct); set('fee-on',c.fee.on); set('fee-pct',c.fee.pct); set('dr-on',false);
+    return fn();
+  } finally {
+    START_MONTH=bak.sm; bak.slots.forEach(o=>{ o.s.on=o.on; o.s.w=o.w; });
+    Object.keys(bak.dom).forEach(id=>{ const e=g(id); if(!e) return; if(e.type==='checkbox') e.checked=bak.dom[id]; else e.value=bak.dom[id]; });
+    window._liveCtx=false;
+    run(); window._liveBusy=_busyBak;
+  }
+}
+function runLive(){ try{ return _withLiveContext(()=>_runLiveInner()); }catch(e){ const el=document.getElementById("live-result"); if(el) el.innerHTML='<div style="color:var(--neg);font-size:13px">계산 오류: '+(e&&e.message)+'</div>'; console.error(e); } }
 function computeLiveReset(act, startYmd, cap, target, reinv, wsum, stopPct){
   const w=act.map(s=>slotById(s).w/wsum), isCash=act.map(s=>slotById(s).type==='cash');
   const breaks={};
@@ -2563,11 +2624,10 @@ function _runLiveInner(){
   if(!dstr){ document.getElementById('live-result').innerHTML='<div style="color:var(--neg)">시작일을 선택하세요.</div>'; return; }
   const startYmd=dstr.slice(2).replace(/-/g,'');
   const slots=SLOTS.filter(s=>s.on&&s.w>0);
-  if(!slots.length){ document.getElementById('live-result').innerHTML='<div style="color:var(--neg)">백테스트 탭에서 매매법을 켜고 비중을 설정하세요.</div>'; return; }
+  if(!slots.length){ document.getElementById('live-result').innerHTML='<div style="color:var(--neg)">위 실전 매매법 비중을 설정하세요.</div>'; return; }
   const wsum=slots.reduce((a,s)=>a+s.w,0);
   // 시작일의 월을 리셋 기준월로 임시 적용 → 시작일에 신규 진입과 동일
-  const _smBak=START_MONTH; START_MONTH=parseInt(dstr.slice(5,7))||1;
-  const _drEl=document.getElementById('dr-on'); const _drBak=_drEl?_drEl.checked:false; if(_drEl) _drEl.checked=false;
+  START_MONTH=parseInt(dstr.slice(5,7))||1;   // 시작일 월 = 리셋 기준월 (래퍼가 복원)
   run();
   const _rsOn=!!(document.getElementById('resetOn')||{}).checked;
   let _rsOut=null, _rsCurve=null, _rsSells=[];
@@ -2622,7 +2682,7 @@ function _runLiveInner(){
     const realShares=eq>0?Math.round(eq/lastPrice):0;
     out.push({slot:s, alloc, total, cash, eq, shares:realShares, ret:(total/alloc-1)*100});
   });
-  } finally { START_MONTH=_smBak; if(_drEl) _drEl.checked=_drBak; run(); switchView('live'); }
+  } finally {}
   if(_rsOut){ renderLive(_rsOut, cap, startYmd, lastYmd, _rsCurve, _rsSells); return; }
   const _nInv=out.filter(o=>o.slot.type!=='cash'&&o.eq!==undefined).length - out.filter(o=>o.slot.type==='cash').length*0;
   const _need=Math.max(...Object.values(_dN),0);
@@ -2708,8 +2768,7 @@ function runSlotLive(slot, subRows, alloc, si){
 function switchView(v){ document.querySelectorAll(".viewtabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
   document.getElementById("view-back").style.display=v==="back"?"block":"none";
   document.getElementById("view-data").style.display=v==="data"?"block":"none";
-  const _vl=document.getElementById("view-live"); if(_vl) _vl.style.display=v==="live"?"block":"none";
-  if(v==="live"){ const _ld=document.getElementById("live-date"); if(_ld&&!_ld.value){ _ld.value="2024-01-02"; } if(!window._liveBusy){ setTimeout(()=>{ window._liveBusy=true; try{ runLive(); }finally{ window._liveBusy=false; } },0); } }
+  if(v==="live"){ renderLiveCfg(); const _ld=document.getElementById("live-date"); if(_ld&&!_ld.value){ _ld.value="2024-01-02"; } if(!window._liveBusy){ setTimeout(()=>{ window._liveBusy=true; try{ runLive(); }finally{ window._liveBusy=false; } },0); } }
   document.getElementById("view-compare").style.display=v==="compare"?"block":"none";
   document.getElementById("view-journal").style.display=v==="journal"?"block":"none";
   if(v==="compare") renderCompare();
@@ -3195,6 +3254,7 @@ async function cloudInit(){
 }
 function safeLS(){ try{ return window.localStorage; }catch(e){ return null; } }
 function saveAll(){
+  if(window._liveCtx) return;   // 실전현황 계산 중(임시 설정)엔 저장 안 함
   const ls=safeLS(); if(!ls) return;
   // 계좌 설정 (result는 제외)
   const acct={};
@@ -3219,7 +3279,7 @@ function saveAll(){
   }
   const reset={ on:(document.getElementById('resetOn')||{}).checked||false, tgt:(document.getElementById('resetTarget')||{}).value, reinv:(document.getElementById('resetReinv')||{}).value };
   const view={ startMonth:START_MONTH, drOn:(document.getElementById('dr-on')||{}).checked||false, drY0:(document.getElementById('dr-y0')||{}).value, drY1:(document.getElementById('dr-y1')||{}).value };
-  const live={ cap:(document.getElementById('live-cap')||{}).value, date:(document.getElementById('live-date')||{}).value };
+  const live={ cap:(document.getElementById('live-cap')||{}).value, date:(document.getElementById('live-date')||{}).value, cfg:LIVE_CFG };
   const stop={ on:(document.getElementById('stopOn')||{}).checked||false, pct:(document.getElementById('stopPct')||{}).value };
   const payload={acct, params, curAcct:_curAcct, slots, tw, twdf, twdg, twdgOn, fee, reset, stop, view, live, savedAt, deletedSlots:DELETED_SLOTS.slice(-200)};
   try{ ls.setItem(LS_KEY, JSON.stringify(payload)); }catch(e){}
@@ -3276,7 +3336,7 @@ function loadAll(){
     if(y1&&vw.drY1!=null&&vw.drY1!=='') y1.value=vw.drY1; }
   // 실전현황 시작일·시작자산 복원
   { const lv=d.live||{}; const lc=document.getElementById('live-cap'), ld=document.getElementById('live-date');
-    if(lc&&lv.cap) lc.value=lv.cap; if(ld&&lv.date) ld.value=lv.date; }
+    if(lc&&lv.cap) lc.value=lv.cap; if(ld&&lv.date) ld.value=lv.date; LIVE_CFG=lv.cfg||null; }
   return true;
 }
 
@@ -3284,7 +3344,11 @@ function switchMode(m){
   document.querySelectorAll('.topmenu button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
   document.getElementById('mode-backtest').style.display=(m==='backtest')?'block':'none';
   document.getElementById('mode-trade').style.display=(m==='trade')?'block':'none';
-  document.getElementById('page-title').textContent=(m==='trade')?'매매시트':'🔵 SOXL 백테스트';
+  const _ml=document.getElementById('mode-live'); if(_ml) _ml.style.display=(m==='live')?'block':'none';
+  const _pd=document.getElementById('period-label'); if(_pd) _pd.style.display=(m==='live')?'none':'';
+  document.getElementById('page-title').textContent=(m==='trade')?'매매시트':(m==='live'?'💼 SOXL 실전현황':'🔵 SOXL 백테스트');
+  if(m==='live'){ renderLiveCfg(); const _ld=document.getElementById('live-date'); if(_ld&&!_ld.value) _ld.value='2024-01-02';
+    if(!window._liveBusy){ setTimeout(()=>{ window._liveBusy=true; try{ runLive(); }finally{ window._liveBusy=false; } },0); } }
   if(m==='trade'){
     ['1','2','3'].forEach(a=>{ if(!_acct[a].start) _acct[a].start=defaultStartInput(); });
     switchAccount(_curAcct);
