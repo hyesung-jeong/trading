@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>투자현황</title>
+<title>투자현황 v1.1</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
 <style>
 :root{--bg:#fff;--card:#f7f8fa;--line:#e6e8ec;--ink:#191c22;--sub:#6b7280;--mut:#9aa1ad;--acc:#0f766e;--up:#dc2626;--dn:#2563eb}
@@ -57,7 +58,7 @@ h1{font-size:17px;font-weight:800;letter-spacing:-.02em}
 </head>
 <body>
 <div class="wrap">
-  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">투자현황 <span id="today" style="font-size:12px;font-weight:700;color:var(--sub);margin-left:6px"></span></h1>
+  <h1 style="display:inline-block">투자현황 <span style="font-size:11px;background:#0f766e;color:#fff;padding:2px 7px;border-radius:9px;vertical-align:middle">v1.1</span> <span id="today" style="font-size:12px;font-weight:700;color:var(--sub);margin-left:6px"></span></h1>
   <div class="sub">탭별로 독립된 투자현황 · 각 탭 안에서 체크한 계좌만 합산 <span id="sync-status"></span></div>
 
   <!-- ===== 투자현황 탭 ===== -->
@@ -100,16 +101,16 @@ h1{font-size:17px;font-weight:800;letter-spacing:-.02em}
   <!-- ===== 주간 기록 ===== -->
   <div class="card">
     <div class="label" style="display:flex;justify-content:space-between;align-items:center">
-      주간 기록 (탭별 독립)
-      <button onclick="weekSnap()" style="border:1px solid var(--acc);background:#e6f4f2;color:var(--acc);border-radius:8px;padding:6px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer">📌 이번 주 기록</button>
+      기록 (탭별 독립)
+      <button onclick="weekSnap()" style="border:1px solid var(--acc);background:#e6f4f2;color:var(--acc);border-radius:8px;padding:6px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer">📌 오늘 기록</button>
     </div>
-    <div class="krw" style="margin-bottom:8px">그 주 마지막 날 누르면 현재 합산 평가금이 해당 주차에 기록됩니다 (같은 주에 다시 누르면 갱신)</div>
+    <div class="krw" style="margin-bottom:8px">누를 때마다 오늘 날짜로 현재 합산 평가금이 쌓입니다 (같은 날 다시 누르면 그날 값만 갱신)</div>
     <canvas id="week-chart" style="width:100%;height:150px;display:none;margin-bottom:8px"></canvas>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr>
-        <th style="text-align:left;padding:5px 4px;color:var(--mut);font-size:10.5px;border-bottom:1px solid var(--line)">주차 (기록일)</th>
+        <th style="text-align:left;padding:5px 4px;color:var(--mut);font-size:10.5px;border-bottom:1px solid var(--line)">기록일</th>
         <th style="text-align:right;padding:5px 4px;color:var(--mut);font-size:10.5px;border-bottom:1px solid var(--line)">평가금</th>
-        <th style="text-align:right;padding:5px 4px;color:var(--mut);font-size:10.5px;border-bottom:1px solid var(--line)">주간</th>
+        <th style="text-align:right;padding:5px 4px;color:var(--mut);font-size:10.5px;border-bottom:1px solid var(--line)">직전 대비</th>
         <th style="text-align:right;padding:5px 4px;color:var(--mut);font-size:10.5px;border-bottom:1px solid var(--line)">누적</th>
         <th style="width:24px;border-bottom:1px solid var(--line)"></th>
       </tr></thead>
@@ -151,12 +152,25 @@ function cloudSchedule(){
   if(_cloudTimer) clearTimeout(_cloudTimer);
   _cloudTimer=setTimeout(cloudPush,1500);
 }
+// ===== 기록 합치기 (기기 간): 날짜키 합집합, 같은 키는 최신 ts, 삭제기록 유지 =====
+function mergeHistInto(dst, src){
+  if(!dst||!src||!dst.ports||!src.ports) return dst;
+  dst.ports.forEach(p=>{ const q=src.ports.find(x=>x.id===p.id); if(!q) return;
+    const del={}; (p.histDel||[]).concat(q.histDel||[]).forEach(x=>{ if(!del[x.wk]||x.ts>del[x.wk]) del[x.wk]=x.ts; });
+    const m={}; (q.hist||[]).concat(p.hist||[]).forEach(e=>{ const o=m[e.wk]; if(!o||(e.ts||0)>=(o.ts||0)) m[e.wk]=e; });
+    p.hist=Object.values(m).filter(e=>!(del[e.wk]&&del[e.wk]>=(e.ts||0))).sort((a,b)=>a.wk<b.wk?-1:1);
+    p.histDel=Object.keys(del).map(k=>({wk:k, ts:del[k]})).slice(-300);
+  });
+  return dst;
+}
 async function cloudPush(){
   _cloudTimer=null;
   if(!cloudOn()||!cloudProfile()||!_initDone) return;
   if(_cloudBusy){ _cloudTimer=setTimeout(cloudPush,1500); return; }
   _cloudBusy=true; setSync('저장중…','#b45309');
   try{
+    try{ const r0=await fetch(SUPABASE_URL+'/rest/v1/configs?id=eq.'+encodeURIComponent(rowId())+'&select=data',{headers:chd()});
+      if(r0.ok){ const rr=await r0.json(); if(rr.length&&rr[0].data&&rr[0].data.ST){ mergeHistInto(ST, rr[0].data.ST); try{ localStorage.setItem(LSK, JSON.stringify(ST)); }catch(e){} if(typeof renderWeeks==='function') renderWeeks(); } } }catch(e){}
     const res=await fetch(SUPABASE_URL+'/rest/v1/configs',{method:'POST',
       headers:Object.assign({},chd(),{'Prefer':'resolution=merge-duplicates'}),
       body:JSON.stringify([{id:rowId(), data:{ST:ST, savedAt:ST.savedAt||0}, updated_at:new Date().toISOString()}])});
@@ -176,10 +190,13 @@ async function cloudInit(){
     const localAt=ST.savedAt||0;
     const cloudAt=row&&row.data&&row.data.savedAt?row.data.savedAt:0;
     if(row&&cloudAt>localAt&&row.data.ST){
-      ST=row.data.ST;
+      const _before=JSON.stringify(row.data.ST.ports.map(p=>(p.hist||[]).length));
+      ST=mergeHistInto(row.data.ST, ST);
+      const _added=JSON.stringify(ST.ports.map(p=>(p.hist||[]).length))!==_before;
       try{ localStorage.setItem(LSK, JSON.stringify(ST)); }catch(e){}
       _initDone=true; renderAll();
       setSync('☁ 동기화됨 ('+cloudProfile()+')','#15803d');
+      if(_added){ ST.savedAt=Date.now(); try{ localStorage.setItem(LSK, JSON.stringify(ST)); }catch(e){} await cloudPush(); }
     }else if(localAt>cloudAt){ _initDone=true; await cloudPush(); }
     else{ _initDone=true; setSync('☁ 동기화됨 ('+cloudProfile()+')','#15803d'); }
   }catch(e){ _initDone=true; setSync('☁ 오프라인(로컬만 저장)','#dc2626'); }
@@ -362,11 +379,12 @@ function weekSnap(){
   const {tStart,tEval}=curTotals();
   if(!p.hist) p.hist=[];
   const now=new Date();
-  const wk=isoWeekKey(now);
+  const wk=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+'d'; // 날짜 단위 키
   const dstr=now.getFullYear()+'.'+String(now.getMonth()+1).padStart(2,'0')+'.'+String(now.getDate()).padStart(2,'0');
   const ex=p.hist.find(h=>h.wk===wk);
-  if(ex){ ex.d=dstr; ex.ev=tEval; ex.st=tStart; }
-  else p.hist.push({wk, d:dstr, ev:tEval, st:tStart});
+  if(ex){ ex.d=dstr; ex.ev=tEval; ex.st=tStart; ex.ts=Date.now(); }
+  else p.hist.push({wk, d:dstr, ev:tEval, st:tStart, ts:Date.now()});
+  if(p.histDel) p.histDel=p.histDel.filter(x=>x.wk!==wk);
   p.hist.sort((a,b)=>a.wk<b.wk?-1:1);
   saveS(); renderWeeks();
 }
@@ -374,6 +392,7 @@ function weekDel(wk){
   const p=curPort();
   if(!confirm('이 주차 기록을 삭제할까요?')) return;
   p.hist=(p.hist||[]).filter(h=>h.wk!==wk);
+  p.histDel=(p.histDel||[]).filter(x=>x.wk!==wk).concat([{wk, ts:Date.now()}]);  // 다른 기기와 합칠 때 삭제 유지
   saveS(); renderWeeks();
 }
 function renderWeeks(){
@@ -390,9 +409,10 @@ function renderWeeks(){
     const wkTxt=wkRet===null?'–':`<span class="${cls(wkRet)}">${fmtPct(wkRet)}</span>`;
     const cumTxt=cum===null?'–':`<span class="${cls(cum)}">${fmtPct(cum)}</span>`;
     // 주차 라벨: 월요일 날짜 기준 'M/D주'
-    const wd=h.wk.split('-');
+    const wd=h.wk.replace('d','').split('-');
+    const lab=h.wk.endsWith('d') ? `${h.d}` : `${parseInt(wd[1])}/${parseInt(wd[2])}주 <span style="color:var(--mut);font-weight:400;font-size:10.5px">(${h.d})</span>`;
     html+=`<tr>
-      <td style="padding:6px 4px;border-bottom:1px dashed var(--line);font-weight:600">${parseInt(wd[1])}/${parseInt(wd[2])}주 <span style="color:var(--mut);font-weight:400;font-size:10.5px">(${h.d})</span></td>
+      <td style="padding:6px 4px;border-bottom:1px dashed var(--line);font-weight:600">${lab}</td>
       <td style="padding:6px 4px;text-align:right;border-bottom:1px dashed var(--line);font-weight:700">${money(h.ev)}</td>
       <td style="padding:6px 4px;text-align:right;border-bottom:1px dashed var(--line);font-weight:600">${wkTxt}</td>
       <td style="padding:6px 4px;text-align:right;border-bottom:1px dashed var(--line);font-weight:600">${cumTxt}</td>
