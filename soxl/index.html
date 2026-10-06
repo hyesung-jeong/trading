@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v77 · 실전현황상단탭</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v79 · 실전매매일지</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -464,6 +464,10 @@
       </div>
       <div id="live-cfg" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px"></div>
       <div id="live-result"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h">📒 실전 매매일지</div>
+      <div class="panel-b" style="padding:0" id="live-jrn"></div>
     </div>
   </div>
   
@@ -2585,38 +2589,81 @@ function computeLiveReset(act, startYmd, cap, target, reinv, wsum, stopPct){
     const all=Object.keys(res[act[0]].series).filter(x=>x>=startYmd&&act.every(s=>typeof res[s].series[x]==='number')).sort();
     if(!all.length) return null;
     let amt=w.map(v=>cap*v), cash=0, A=null, ref=null, invStart=1, curFy=null, prevTotal=cap, prevIv=cap, newB=null, V=null;
-    const curve=[], sells=[], stops=[]; let stopped=false, pk=null;
+    const curve=[], sells=[], stops=[], segs=[], events=[], stopDay={}; let stopped=false, pk=null, prevX=null;
+    const ENG=30000;  // 엔진 1회 자본 (series 기준)
+    const eqOf=(Vv,x)=>Vv.map((v,i)=>{ const cr=isCash[i]?1:((res[act[i]].series._cashR&&res[act[i]].series._cashR[x]!=null)?res[act[i]].series._cashR[x]:0); return v*(1-cr); });
     for(let k=0;k<all.length;k++){
       const x=all[k], fy=fyOf(x), brs=breaks[fy]||[];
       if(fy!==curFy){                       // 연초: 각 매매법 자기 금액으로 재시작, 리셋·손절 현금은 비중대로 재투입
-        if(curFy!==null) amt=V.slice();
+        if(curFy!==null){ if(!stopped&&V) events.push({ymd:prevX, type:'fy', eq:eqOf(V,prevX)}); amt=V.slice(); }
         stopped=false; pk=null;
         if(cash>0){ amt=amt.map((a,i)=>a+cash*w[i]); cash=0; }
         A=amt.slice(); ref=act.map(s=>res[s].series[x]); invStart=A.reduce((p,q)=>p+q,0); curFy=fy;
+        segs.push({fy, start:x, f:A.map((a,i)=>ref[i]>0?a/(ref[i]*ENG):0)});
       } else if(stopped){                   // 손절 후: 그해 남은 기간 현금 보유
-        curve.push({ymd:x, asset:cash, cash:cash}); prevTotal=cash; prevIv=0; continue;
+        curve.push({ymd:x, asset:cash, cash:cash}); prevTotal=cash; prevIv=0; prevX=x; continue;
       } else if(brs.includes(x)){           // 목표 도달 다음날: 전날 종가 전량매도분으로 재시작
-        cash=cash+prevIv*(1-reinv); const inv=prevIv*reinv; A=w.map(v=>inv*v); ref=act.map(()=>1); invStart=inv;  // 투자분만 매도→재투입, 기존 현금 보관
+        cash=cash+prevIv*(1-reinv); const inv=prevIv*reinv; A=w.map(v=>inv*v); ref=act.map(()=>1); invStart=inv; segs.push({fy, start:x, f:A.map(a=>a/ENG)});  // 투자분만 매도→재투입, 기존 현금 보관
       }
       V=A.map((a,i)=>a*res[act[i]].series[x]/ref[i]);
       let iv=0, ic=0; V.forEach((v,i)=>{ iv+=v; const cr=isCash[i]?1:((res[act[i]].series._cashR&&res[act[i]].series._cashR[x]!=null)?res[act[i]].series._cashR[x]:0); ic+=v*cr; });
       const total=iv+cash; prevTotal=total; prevIv=iv;
       if(pk===null||total>pk) pk=total;
       if(stopPct && (total-pk)/pk*100<=-stopPct){   // MDD 손절: 오늘 종가 전량매도 → 그해 종료
+        events.push({ymd:x, type:'stop', eq:eqOf(V,x)}); stopDay[fy]=x;
         stopped=true; stops.push(x); cash=total; V=V.map(()=>0); A=A.map(()=>0);
-        curve.push({ymd:x, asset:total, cash:total}); continue;
+        curve.push({ymd:x, asset:total, cash:total}); prevX=x; continue;
       }
-      curve.push({ymd:x, asset:total, cash:ic+cash});
+      curve.push({ymd:x, asset:total, cash:ic+cash}); prevX=x;
       const nx=all[k+1];
       if(invStart>0 && iv/invStart>=target && nx && fyOf(nx)===fy){
-        sells.push(x);
+        sells.push(x); events.push({ymd:x, type:'reset', eq:eqOf(V,x)});
         if(!brs.includes(nx)){ newB=[fy,nx]; break; }
       }
     }
-    if(!newB){ const lastX=all[all.length-1]; return {res, curve, sells, stops, stopped, V, cash, lastX, segR:act.map((s,i)=>stopped?null:res[s].series[lastX]/ref[i])}; }
+    if(!newB){ const lastX=all[all.length-1]; return {res, curve, sells, stops, stopped, V, cash, lastX, segs, events, stopDay, act, segR:act.map((s,i)=>stopped?null:res[s].series[lastX]/ref[i])}; }
     breaks[newB[0]]=(breaks[newB[0]]||[]).concat([newB[1]]).sort();
   }
   return null;
+}
+
+// ===== 실전 매매일지: 엔진 매매내역을 실전 금액으로 환산 + 익절/손절/연도리셋 강제매도 =====
+let _ljStrat='all', _ljYear='all';
+function buildLiveJournal(LR, startYmd){
+  const rows=[]; if(!LR) return rows;
+  const act=LR.act, close={}; DATA.forEach(r=>close[r[0]]=r[1]);
+  act.forEach((s,i)=>{ const sl=slotById(s); if(!sl||sl.type==='cash') return; const tl=LR.res[s].tlog||[];
+    tl.forEach(t=>{ if(t.ymd<startYmd) return; const fy=fyOf(t.ymd);
+      if(LR.stopDay[fy]&&t.ymd>LR.stopDay[fy]) return;
+      let seg=null; for(const g of LR.segs){ if(g.fy===fy&&g.start<=t.ymd) seg=g; }
+      if(!seg) return; const f=seg.f[i]; const q=Math.round(t.qty*f); if(q<=0) return;
+      rows.push({...t, qty:q, amt:t.amt*f, strat:sl.name, scls:STRAT_TYPES[sl.type].cls}); }); });
+  const RS={reset:'💰 익절 리셋 전량매도', stop:'🛑 MDD 손절 전량매도', fy:'연도 리셋 정리매도'};
+  LR.events.forEach(ev=>{ if(ev.ymd<startYmd) return; const px=close[ev.ymd]; if(!px) return;
+    act.forEach((s,i)=>{ const sl=slotById(s); if(!sl||sl.type==='cash') return; const q=Math.round(ev.eq[i]/px); if(q<=0) return;
+      rows.push({ymd:ev.ymd, mode:'-', act:'매도', tier:'전체', reason:RS[ev.type], qty:q, price:px, amt:q*px, strat:sl.name, scls:STRAT_TYPES[sl.type].cls, forced:true}); }); });
+  rows.sort((a,b)=>a.ymd<b.ymd?-1:a.ymd>b.ymd?1:(a.forced?1:0)-(b.forced?1:0));
+  return rows;
+}
+function renderLiveJournal(){
+  const el=document.getElementById('live-jrn'); if(!el) return;
+  const all=window._liveJrn||[];
+  const fmt=s=>"20"+s.slice(0,2)+"."+s.slice(2,4)+"."+s.slice(4,6);
+  const strats=[...new Set(all.map(t=>t.strat))]; const years=[...new Set(all.map(t=>'20'+t.ymd.slice(0,2)))].sort();
+  let c=`<b>전략:</b> <button class="jbtn ${_ljStrat==='all'?'on':''}" onclick="_ljStrat='all';renderLiveJournal()">전체</button> `;
+  strats.forEach(s=>{ c+=`<button class="jbtn ${_ljStrat===s?'on':''}" onclick="_ljStrat='${s}';renderLiveJournal()">${s}</button> `; });
+  c+=` &nbsp;<b>연도:</b> <button class="jbtn ${_ljYear==='all'?'on':''}" onclick="_ljYear='all';renderLiveJournal()">전체</button> `;
+  years.forEach(y=>{ c+=`<button class="jbtn ${_ljYear===y?'on':''}" onclick="_ljYear='${y}';renderLiveJournal()">${y}</button> `; });
+  const rows=all.filter(t=>(_ljStrat==='all'||t.strat===_ljStrat)&&(_ljYear==='all'||('20'+t.ymd.slice(0,2))===_ljYear));
+  const nb=rows.filter(t=>t.act==='매수').length, ns=rows.length-nb;
+  const bAmt=rows.filter(t=>t.act==='매수').reduce((a,t)=>a+t.amt,0), sAmt=rows.filter(t=>t.act!=='매수').reduce((a,t)=>a+t.amt,0);
+  let body='';
+  for(let i=rows.length-1;i>=0;i--){ const t=rows[i]; const mcls=(t.mode==='공격'||t.mode==='공세'||t.mode==='바닥')?'atk':'def';
+    body+=`<tr${t.forced?' style="background:var(--panel2);font-weight:600"':''}><td>${fmt(t.ymd)}</td><td><span class="dot ${t.scls}" style="display:inline-block;margin-right:5px"></span>${t.strat}</td><td class="${mcls}">${t.mode||'-'}</td><td class="${t.act==='매수'?'atk':'def'}">${t.act}</td><td>${t.tier}</td><td>${t.reason}</td><td>${t.qty.toLocaleString()}</td><td>$${t.price.toFixed(2)}</td><td>$${Math.round(t.amt).toLocaleString()}</td></tr>`; }
+  if(!rows.length) body='<tr><td colspan="9" style="text-align:center;color:var(--faint);padding:20px">매매 내역이 없습니다</td></tr>';
+  el.innerHTML=`<div class="data-meta">${c}</div>
+    <div class="data-meta">총 ${rows.length}건 (매수 ${nb} · $${Math.round(bAmt).toLocaleString()} / 매도 ${ns} · $${Math.round(sAmt).toLocaleString()})${rows.length?` · ${fmt(rows[0].ymd)} ~ ${fmt(rows[rows.length-1].ymd)}`:''} · 금액·수량은 실전 시작자산·비중 기준 환산</div>
+    <div class="data-scroll" style="max-height:520px"><table class="datatable"><thead><tr><th>날짜</th><th>전략</th><th>모드</th><th>구분</th><th>티어</th><th>사유</th><th>수량</th><th>체결가</th><th>금액</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function _runLiveInner(){
   const cap=parseFloat(document.getElementById('live-cap').value)||450000;
@@ -2634,13 +2681,13 @@ function _runLiveInner(){
   const {results, active}=window._cmp;
   const out=[]; const lastYmd=DATA[DATA.length-1][0]; const _dA={}, _dC={}, _dN={}; let _cashFixed=0;
   try{
-  const _stC=_stopCfg(); window._liveStops=null; window._liveStopped=false;
+  const _stC=_stopCfg(); window._liveStops=null; window._liveStopped=false; window._liveLR=null;
   if(_rsOn||_stC.on){
     // ── 익절 리셋 / MDD 손절 반영(실전 연속): 목표 도달일 전량매도 → 다음날 매매법 재시작, 연초엔 확보현금 재투입 ──
     const act=window._cmp.active.filter(s=>slotById(s));
     const tgt=1+((parseFloat((document.getElementById('resetTarget')||{}).value))||100)/100;
     const rnv=((parseFloat((document.getElementById('resetReinv')||{}).value))||40)/100;
-    const LR=computeLiveReset(act, startYmd, cap, _rsOn?tgt:Infinity, rnv, wsum, _stC.on?_stC.pct:null);
+    const LR=computeLiveReset(act, startYmd, cap, _rsOn?tgt:Infinity, rnv, wsum, _stC.on?_stC.pct:null); window._liveLR=LR;
     if(LR){
       _rsCurve=LR.curve; _rsSells=_rsOn?LR.sells:null; _rsOut=[]; window._liveStops=_stC.on?LR.stops:null; window._liveStopped=LR.stopped;
       const price=(DATA.find(r=>r[0]===LR.lastX)||DATA[DATA.length-1])[1];
@@ -2682,7 +2729,10 @@ function _runLiveInner(){
     const realShares=eq>0?Math.round(eq/lastPrice):0;
     out.push({slot:s, alloc, total, cash, eq, shares:realShares, ret:(total/alloc-1)*100});
   });
+  if(!window._liveLR){ const _a=window._cmp.active.filter(s=>slotById(s)); window._liveLR=computeLiveReset(_a, startYmd, cap, Infinity, 0.4, wsum, null); }
+  window._liveJrn=buildLiveJournal(window._liveLR, startYmd);
   } finally {}
+  setTimeout(renderLiveJournal,0);
   if(_rsOut){ renderLive(_rsOut, cap, startYmd, lastYmd, _rsCurve, _rsSells); return; }
   const _nInv=out.filter(o=>o.slot.type!=='cash'&&o.eq!==undefined).length - out.filter(o=>o.slot.type==='cash').length*0;
   const _need=Math.max(...Object.values(_dN),0);
