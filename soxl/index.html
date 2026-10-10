@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v88 · 수동저장</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v90 · 2026누락수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1392,7 +1392,7 @@ function paramsForType(type){
 // 현금 슬롯: 항상 연초 대비 1.0 배수 (무수익·무손실) → 합산 시 수익률/MDD를 완충
 let _CASH_RES=null;
 function runCash(){
-  if(_CASH_RES) return _CASH_RES;
+  // 캐시 안 함: 시작월·데이터 길이·리셋 구간에 따라 연도 목록이 달라지므로 매번 새로 계산 (가벼움)
   const series={}; const ys=new Set();
   DATA.forEach(r=>{ if(r[6]===1) return; series[r[0]]=1.0; ys.add(fyOf(r[0])); });
   const years=[...ys].sort((a,b)=>a-b);
@@ -2254,7 +2254,7 @@ function togglePanel(h){
 function updatePeriodLabel(){
   const [a,b]=getYearRange();
   document.getElementById("period-label").textContent=
-    `${a}~${b} · 단리(연 리셋) · ${_btCapOn()?'전체 $'+Math.round(_btCap()).toLocaleString()+' (비중 배분)':'각 전략 $30,000'} · 데이터 ${DATA_LAST_DATE}까지`;
+    `${a}~${b} · 단리(연 리셋) · ${_btCapOn()?'전체 $'+Math.round(_btCap()).toLocaleString()+' (비중 배분)':'각 전략 $30,000'} · 데이터 ${DATA_LAST_DATE}까지${window._priceFail?' ⚠ 입력주가 불러오기 실패(새로고침)':''}`;
 }
 
 // 듀얼 정답 시트값 (기본 파라미터 기준, 연도별 독립 1만)
@@ -2355,6 +2355,16 @@ function render(results){
       `<td class="neg" style="white-space:nowrap">${r.mdd.toFixed(1)}%${bMdd}</td>`+       `<td title="주식 최대 투자 시점">${(r.minCashPct!=null?r.minCashPct.toFixed(0):'-')}%</td>`+
       `<td title="${uw.recovered?'연내 회복':'연말까지 미회복'}">${uwTxt}</td>`+
       `<td>${c.toFixed(2)}</td></tr>`; });
+  { // 선택 범위 안인데 데이터가 아직 없는 회계연도 → 안내 행 (시작월≠1이면 그 해 시작월 이후 데이터가 필요)
+    const _ncol=(document.querySelector('#yearbody')&&document.querySelector('#yearbody').closest('table'))?document.querySelector('#yearbody').closest('table').querySelectorAll('thead th').length:10;
+    const _lastFy=fyOf(DATA[DATA.length-1][0]);
+    for(let y=(years.length?Math.max(...years)+1:yLo); y<=yHi; y++){
+      if(y<=_lastFy) continue;
+      const lab=START_MONTH>1?`${String(y).slice(2)}.${START_MONTH}~${String(y+1).slice(2)}.${START_MONTH-1}`:`${y}.1~12`;
+      const prev=START_MONTH>1?` — ${y}년 1~${START_MONTH-1}월은 ${y-1} 행에 포함`:'';
+      yb+=`<tr style="color:var(--faint)"><td style="text-align:left;white-space:nowrap">${y} <span style="font-size:9px">${lab}</span></td><td colspan="${Math.max(1,_ncol-1)}" style="text-align:left;font-size:11px">아직 데이터 없음 (데이터 ${DATA_LAST_DATE}까지)${prev}</td></tr>`;
+    }
+  }
   document.getElementById("yearbody").innerHTML=yb;
   // 전략별 요약
   let sb="";
@@ -3097,8 +3107,9 @@ function _recalcDataMeta(){
 async function fetchAndApplyPrices(){
   try{
     const url=SUPABASE_URL+'/rest/v1/configs?id=eq.'+PRICE_CODE_SOXL+'&select=data';
-    const res=await fetch(url,{headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}});
-    if(!res.ok) return false;
+    let res=null; for(let _t=0;_t<2&&!(res&&res.ok);_t++){ try{ res=await fetch(url,{cache:'no-store',headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}}); }catch(e){ res=null; } if(!(res&&res.ok)) await new Promise(r=>setTimeout(r,1500)); }
+    if(!(res&&res.ok)){ window._priceFail=true; try{ updatePeriodLabel(); }catch(e){} return false; }
+    window._priceFail=false;
     const rows=await res.json(); const d=rows.length?rows[0].data:null;
     if(!d||!Array.isArray(d.prices)||!d.prices.length) return false;
     const lastData=DATA[DATA.length-1][0];
@@ -3133,7 +3144,7 @@ async function fetchAndApplyPrices(){
     });
     if(typeof _maCache==='object') for(const k in _maCache) delete _maCache[k];   // 새 주가 반영 → 이평 재계산
     return true;
-  }catch(e){ return false; }
+  }catch(e){ window._priceFail=true; try{ updatePeriodLabel(); }catch(_){} return false; }
 }
  // Project Settings → API → anon public key
 
