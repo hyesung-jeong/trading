@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v86 · 실전프리셋표시</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v88 · 수동저장</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1483,7 +1483,7 @@ function setSecW(id,v,from){ const sl=slotById(id); if(!sl) return; let w=parseF
   if(lbl) lbl.textContent='(메인 '+(100-w)+' / 세컨 '+w+')';
   saveAll(); run(); }
 function setSecTrig(id,val){ const sl=slotById(id); if(!sl)return; sl.secTrig=val; saveAll(); renderWeights(); run(); }
-function setRebal(){ try{ const el=document.getElementById('rebalMode'); if(el) localStorage.setItem('soxl_rebal', el.value); }catch(e){} run(); }
+function setRebal(){ saveAll(); run(); }
 function setStop(){
   const on=document.getElementById('stopOn'), row=document.getElementById('stopRow');
   if(on&&row) row.style.display=on.checked?'flex':'none';
@@ -3284,7 +3284,7 @@ async function cloudSaveAll(){
       const ok=confirm('⚠ 다른 기기에서 '+_snapTime(_C.snapshotAt)+'에 저장한 최신본이 클라우드에 있습니다.\n\n[확인] 지금 이 화면 설정으로 덮어쓰기\n[취소] 덮어쓰지 않고 그 최신본 불러오기');
       if(!ok){
         writeLocalBundle({active:_C.active, sets:_C.sets, presets:_C.presets}); setLocalSnapAt(_C.snapshotAt);
-        applyLocalToUI(); setSyncStatus('☁ 최종본 불러옴 '+_snapTime(_C.snapshotAt)+' ('+prof+')','#1565c0');
+        applyLocalToUI(); _markSynced(); setSyncStatus('☁ 최종본 불러옴 '+_snapTime(_C.snapshotAt)+' ('+prof+')','#1565c0');
         _cloudBusy=false; return;
       }
     }
@@ -3296,7 +3296,7 @@ async function cloudSaveAll(){
     const res=await fetch(`${SUPABASE_URL}/rest/v1/configs`,{ method:'POST', headers:{...cloudHeaders(),'Prefer':'resolution=merge-duplicates'},
       body:JSON.stringify([{id:prof, data:bundle, updated_at:new Date().toISOString()}]) });
     if(!res.ok){ let tx=''; try{ tx=await res.text(); }catch(e){} throw new Error('업로드 실패 '+res.status+' '+tx.slice(0,80)); }
-    setLocalSnapAt(t); writeLocalBundle({active:bundle.active, sets:b.sets, presets:b.presets});
+    setLocalSnapAt(t); writeLocalBundle({active:bundle.active, sets:b.sets, presets:b.presets}); _markSynced();
     const hh=new Date(t); const hm=hh.getHours()+':'+String(hh.getMinutes()).padStart(2,'0');
     setSyncStatus('☁ 전체 저장됨 '+hm+' ('+prof+')','#1565c0');
     alert('전체 저장 완료. 다른 기기에서 새로고침하면 이 설정이 그대로 나옵니다.');
@@ -3372,9 +3372,21 @@ function applyLocalToUI(){
 }
 /* cloudPullApply 제거: 자동 수신 없음 — 페이지 로드시 cloudInit에서만 최종본 수신 */
 // 자동 pull 비활성화 — 페이지 로드시에만 클라우드 최종본을 받음 (사용자 요청)
+// ===== 자동 동기화 (변경 1.5초 뒤 업로드). 올리기 직전 클라우드 확인: 다른 기기가 더 최근에 저장했으면 덮어쓰지 않고 그걸 받아옴 =====
+const LS_SYNCSIG='soxl_sync_sig';
+function _stripSaved(o){ return JSON.parse(JSON.stringify(o||null,(k,v)=>(k==='savedAt'?undefined:v))); }
+function _syncSig(){ const b=readLocalBundle(); return JSON.stringify({a:_stripSaved(b.active), s:_stripSaved(b.sets), p:_stripSaved(b.presets)}); }
+function _lastSig(){ try{ return localStorage.getItem(LS_SYNCSIG)||''; }catch(e){ return ''; } }
+function _markSynced(){ try{ localStorage.setItem(LS_SYNCSIG, _syncSig()); }catch(e){} }
+function _isDirty(){ const l=_lastSig(); return !!l && _syncSig()!==l; }   // 서명 기록 전(첫 실행)은 변경 없음으로 봄
+function _showDirty(){ const el=document.getElementById('sync-status'); if(!el||!cloudOn()||!cloudProfile()) return;
+  if(_isDirty()){ el.dataset.dirty='1'; el.innerHTML='<span style="color:#c26b00;font-weight:700">● 저장 안 된 변경 있음</span> <span style="color:var(--faint)">(☁ 전체 저장을 눌러야 다른 기기에 반영)</span>'; el.style.color=''; }
+  else if(el.dataset.dirty==='1'){ el.dataset.dirty=''; el.textContent='☁ 최신 상태 '+(localSnapAt()?_snapTime(localSnapAt())+' 저장본 ':'')+'('+cloudProfile()+')'; el.style.color='#1565c0'; } }
 function cloudSchedulePush(){
-  // 자동 업로드 비활성화 — 'ê˜ 전체 저장' 버튼으로만 저장 (사용자 요청)
-  return;
+  // 자동 업로드 안 함 (사용자 요청) — '☁ 전체 저장' 버튼으로만 올림. 저장 안 된 변경 표시만 갱신
+  if(!_initDone||_applying) return;
+  if(_cloudTimer) clearTimeout(_cloudTimer);
+  _cloudTimer=setTimeout(()=>{ _cloudTimer=null; _showDirty(); },300);
 }
 async function cloudInit(){
   if(!cloudOn()){ setSyncStatus('',''); _initDone=true; return; }
@@ -3386,12 +3398,17 @@ async function cloudInit(){
     _initDone=true;
     // 페이지 로드시: 클라우드에 '전체 저장' 최종본이 로컬보다 새로우면 그것만 받아 적용. 자동 업로드는 안 함.
     // 기기 시계 차이 무관: 클라우드 최종본 ID가 이 기기가 마지막으로 저장/수신한 ID와 다르면 = 다른 기기가 새로 저장한 것 → 받음
-    if(C && C.snapshotAt && C.snapshotAt !== localSnapAt()){
+    if(C && C.snapshotAt && C.snapshotAt !== localSnapAt() && _isDirty() && !confirm('다른 기기에서 '+_snapTime(C.snapshotAt)+'에 전체 저장한 최신 설정이 있습니다.\n\n[확인] 최신 설정 불러오기 (이 기기의 저장 안 된 변경은 사라짐)\n[취소] 이 기기 설정 유지')){
+      setSyncStatus('⚠ 다른 기기 최신본 있음 '+_snapTime(C.snapshotAt)+' · 이 기기 설정 유지중 (전체 저장 시 덮어씀)','#c26b00');
+    } else if(C && C.snapshotAt && C.snapshotAt !== localSnapAt()){
       writeLocalBundle({active:C.active, sets:C.sets, presets:C.presets}); setLocalSnapAt(C.snapshotAt);
-      applyLocalToUI();
+      applyLocalToUI(); _markSynced();
       setSyncStatus('☁ 최종본 불러옴 '+_snapTime(C.snapshotAt)+' ('+cloudProfile()+')','#1565c0');
     } else {
       setSyncStatus('☁ 최신 상태 '+(localSnapAt()?_snapTime(localSnapAt())+' 저장본 ':'')+'('+cloudProfile()+')','#1565c0');
+      if(!C) { /* 클라우드 비어있음 */ } 
+      if(!_lastSig()) _markSynced();   // 첫 실행: 현재 상태를 기준으로
+      _showDirty();
     }
   }catch(e){ _initDone=true; setSyncStatus('☁ 오프라인: '+(e&&e.message?e.message:e),'#c62828'); }
 }
@@ -3421,7 +3438,7 @@ function saveAll(){
     try{ const prev=JSON.parse(ls.getItem(LS_KEY)); savedAt=(prev&&prev.savedAt)?prev.savedAt:0; }catch(e){ savedAt=0; }
   }
   const reset={ on:(document.getElementById('resetOn')||{}).checked||false, tgt:(document.getElementById('resetTarget')||{}).value, reinv:(document.getElementById('resetReinv')||{}).value };
-  const view={ btCapOn:_btCapOn(), btCap:String(_num((document.getElementById('bt-cap')||{}).value)||90000), startMonth:START_MONTH, drOn:(document.getElementById('dr-on')||{}).checked||false, drY0:(document.getElementById('dr-y0')||{}).value, drY1:(document.getElementById('dr-y1')||{}).value };
+  const view={ rebal:(document.getElementById('rebalMode')||{}).value||'none', btCapOn:_btCapOn(), btCap:String(_num((document.getElementById('bt-cap')||{}).value)||90000), startMonth:START_MONTH, drOn:(document.getElementById('dr-on')||{}).checked||false, drY0:(document.getElementById('dr-y0')||{}).value, drY1:(document.getElementById('dr-y1')||{}).value };
   const live={ cap:String(_num((document.getElementById('live-cap')||{}).value)||450000), date:(document.getElementById('live-date')||{}).value, cfg:LIVE_CFG };
   const stop={ on:(document.getElementById('stopOn')||{}).checked||false, pct:(document.getElementById('stopPct')||{}).value };
   const maf={ on:(document.getElementById('maOn')||{}).checked||false, n:(document.getElementById('maN')||{}).value };
@@ -3473,7 +3490,7 @@ function loadAll(){
   { const so=document.getElementById('stopOn'), sp=document.getElementById('stopPct'), sr=document.getElementById('stopRow'); const st=d.stop||{on:false};
     if(so) so.checked=!!st.on; if(sp&&st.pct!=null&&st.pct!=='') sp.value=st.pct; if(sr) sr.style.display=(so&&so.checked)?'flex':'none'; }
   // 시작월·날짜구간 복원 (설정탭별 독립)
-  { const vw=d.view||{}; const _bco=document.getElementById('bt-cap-on'), _bc=document.getElementById('bt-cap'); if(_bco) _bco.checked=!!vw.btCapOn; if(_bc) _bc.value=_fmtMoney((vw.btCap&&_num(vw.btCap)>0)?vw.btCap:90000);
+  { const vw=d.view||{}; { const _rbe=document.getElementById('rebalMode'); if(_rbe){ let _rv=vw.rebal; if(!_rv){ try{ _rv=localStorage.getItem('soxl_rebal'); }catch(e){} } _rbe.value=_rv||'none'; } } const _bco=document.getElementById('bt-cap-on'), _bc=document.getElementById('bt-cap'); if(_bco) _bco.checked=!!vw.btCapOn; if(_bc) _bc.value=_fmtMoney((vw.btCap&&_num(vw.btCap)>0)?vw.btCap:90000);
     if(vw.startMonth!=null){ START_MONTH=parseInt(vw.startMonth)||1; const sm=document.getElementById('startMonth'); if(sm) sm.value=String(START_MONTH); }
     const don=document.getElementById('dr-on'), di=document.getElementById('dr-inputs');
     if(don){ don.checked=!!vw.drOn; if(di) di.style.display=vw.drOn?'inline':'none'; }
@@ -4108,12 +4125,15 @@ function resetAcctParams(){
 initDateRange(); loadAll();
 // 수동 주가(hs-price) 로드 → DATA 갱신 후 날짜범위·백테 재생성
 fetchAndApplyPrices().then(ok=>{ if(ok){ try{ _recalcDataMeta(); initDateRange(); if(typeof run==='function') run(); if(typeof renderDataTab==='function') renderDataTab(); }catch(e){} } });
-try{ const _rb=localStorage.getItem('soxl_rebal'); if(_rb){ const el=document.getElementById('rebalMode'); if(el) el.value=_rb; } }catch(e){}
+/* 리밸런싱은 설정(view.rebal)으로 저장·동기화 — loadAll에서 복원 */
 /* 익절리셋 옛 전역복원 제거 — 설정탭별 복원(loadAll)으로 대체 */
  renderWeights(); renderTw(); if(typeof renderTwdg==="function")renderTwdg(); getFeeRate(); renderWsTabs();
 // 클라우드 동기화 시작 (설정돼 있으면)
 if(cloudOn() && !cloudProfile()) askCloudProfile(); else cloudInit();
 // 탭으로 돌아왔을 때 클라우드에 더 최신 설정이 있으면 자동 반영
+function _resumeCheck(){ if(_initDone && !_cloudTimer && !_cloudBusy && cloudOn() && cloudProfile()){ _initDone=false; cloudInit(); } }
+window.addEventListener('pageshow', e=>{ if(e.persisted) _resumeCheck(); });
+window.addEventListener('focus', ()=>{ if(Date.now()-(window._lastResume||0)>5000){ window._lastResume=Date.now(); _resumeCheck(); } });
 document.addEventListener('visibilitychange', function(){
   if(!document.hidden && _initDone && !_cloudTimer && !_cloudBusy && cloudOn() && cloudProfile()){
     _initDone=false; cloudInit();
