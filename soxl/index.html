@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v96 · 연도표 월표시</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button><button onclick="cloudLoadLatest()" title="클라우드에 전체 저장된 최종본을 강제로 불러옵니다 (이 기기 설정을 덮어씀)" style="margin-left:4px;padding:3px 9px;border:1px solid #6a1b9a;background:#f3e5f5;color:#4a148c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">⤓ 불러오기</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v97 · 현금고정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button><button onclick="cloudLoadLatest()" title="클라우드에 전체 저장된 최종본을 강제로 불러옵니다 (이 기기 설정을 덮어씀)" style="margin-left:4px;padding:3px 9px;border:1px solid #6a1b9a;background:#f3e5f5;color:#4a148c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">⤓ 불러오기</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -1504,7 +1504,15 @@ function gi(id){return parseInt(gv(id));}
 // ===== 슬롯 기반 전략/비중 UI =====
 function activeSlots(){ return SLOTS.filter(s=>s.on); }
 function toggleStrat(id){ const sl=slotById(id); if(!sl) return; sl.on=!sl.on;
-  rebalanceWeights(); renderWeights(); run(); }
+  const lc=activeSlots().find(k=>k.type==='cash'&&k.lock);
+  if(sl.type==='cash'){   // 현금 켜기/끄기: 매매법끼리 기존 비율 유지
+    if(sl.on) _placeCash(sl, (sl.w>0&&sl.w<100)?sl.w:30);
+    else { const ot=activeSlots(); const os=ot.reduce((a,k)=>a+k.w,0); ot.forEach(k=>k.w=os>0?100*k.w/os:100/ot.length); if(ot.length) _intSplit(ot,100); }
+  }
+  else if(lc){ const keep=(lc===sl)?(lc.w>0&&lc.w<100?lc.w:30):lc.w;   // 현금 고정 중: 현금은 그대로, 매매법끼리 균등
+    const others=activeSlots().filter(k=>k!==lc); others.forEach(k=>k.w=1); _placeCash(lc, Math.min(keep, others.length?99:100)); }
+  else rebalanceWeights();
+  renderWeights(); run(); }
 function toggleSlotSM(id){ const sl=slotById(id); if(!sl||sl.type==='cash') return; sl.smOn=!sl.smOn; if(sl.smOn&&!sl.sm){ sl.sm=((START_MONTH+1)%12)||12; } saveAll(); renderWeights(); run(); }
 function setSlotEM(id,v){ const sl=slotById(id); if(!sl) return; sl.em=parseInt(v)||0; saveAll(); renderWeights(); run(); }
 function setSlotSM(id,v){ const sl=slotById(id); if(!sl) return; sl.sm=Math.min(12,Math.max(1,parseInt(v)||1)); saveAll(); renderWeights(); run(); }
@@ -1568,7 +1576,10 @@ function addSlot(type){
   if(type==='cash' && countType('cash')>=1){ alert('현금 슬롯은 1개만 추가할 수 있습니다.'); return; }
   if(type!=='cash' && countType(type)>=MAX_PER_TYPE){ alert(STRAT_TYPES[type].name+'은 최대 '+MAX_PER_TYPE+'개까지 추가할 수 있습니다.'); return; }
   const sl={id:newSlotId(), type:type, name:nextTypeName(type), on:true, w:0, params:{}};
-  SLOTS.push(sl); rebalanceWeights(); renderWeights(); run();
+  SLOTS.push(sl);
+  if(type==='cash'){ sl.lock=true; _placeCash(sl, 30); }   // 현금: 기본 30% 고정, 기존 매매법 비율은 그대로 70% 안에서
+  else rebalanceWeights();
+  renderWeights(); run();
 }
 function removeSlot(id){
   const i=SLOTS.findIndex(s=>s.id===id); if(i<0) return;
@@ -1593,6 +1604,7 @@ function renderWeights(){
       ${(function(){ let pl=slotPresetLabel(s); if(pl) pl=pl.replace("(세컨동시)",""); return pl?`<span onclick="openSlotParams('${s.id}')" title="적용된 프리셋 (* = 값 수정됨)" style="font-size:10px;padding:2px 5px;border-radius:9px;background:#eef4ff;color:#3b6fd4;border:1px solid #c9daf5;cursor:pointer;white-space:nowrap;flex-shrink:0">${pl}</span>`:''; })()}
       ${(s.type==='dongpa'||s.type==='dual'||s.type==='three')?`<button onclick="toggleSecond('${s.id}')" title="세컨: 메인이 풀티어된 다음날부터 추가 진입" style="border:1px solid ${s.sec?'var(--accent2)':'var(--line)'};background:${s.sec?'var(--accent2)':'var(--panel)'};color:${s.sec?'#fff':'var(--dim)'};cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">세컨${s.sec?' ✓':''}</button>`:''}
       ${s.type!=='cash'?`<button onclick="toggleSlotSM('${s.id}')" title="이 매매법만 회계연도 안에서 지정한 월부터 시작 / 끝월까지만 매매" style="border:1px solid ${s.smOn?'#e8890c':'var(--line)'};background:${s.smOn?'#e8890c':'var(--panel)'};color:${s.smOn?'#fff':'var(--dim)'};cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">${s.smOn?(s.sm||'?')+'월~'+((+s.em>0)?s.em+'월':''):'시작월'}</button>`:''}
+      ${s.type==='cash'?`<button onclick="toggleCashLock('${s.id}')" title="현금 비중 고정: 다른 매매법 비중을 바꿔도 현금은 그대로, 매매법끼리 나머지 비중 안에서 비율대로 나눔" style="border:1px solid ${s.lock?'#2e7d32':'var(--line)'};background:${s.lock?'#2e7d32':'var(--panel)'};color:${s.lock?'#fff':'var(--dim)'};cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">${s.lock?'🔒 고정':'고정'}</button>`:''}
       ${s.type!=='cash'?`<button onclick="openSlotParams('${s.id}')" style="border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0">파라미터</button>`:''}
       <button onclick="removeSlot('${s.id}')" style="border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;padding:0 2px;flex-shrink:0" title="삭제">×</button>
     </div>${s.smOn&&s.type!=='cash'?`<div style="display:flex;align-items:center;gap:6px;padding:2px 10px 8px 34px;font-size:11px;color:var(--dim)"><span>시작월</span><select onchange="setSlotSM('${s.id}',this.value)" style="padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink);font-size:11px">${[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>`<option value="${m}" ${(+s.sm===m)?'selected':''}>${m}월</option>`).join('')}</select><span>끝월</span><select onchange="setSlotEM('${s.id}',this.value)" style="padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink);font-size:11px"><option value="0" ${!(+s.em>0)?'selected':''}>공통(회계연도 끝)</option>${[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>`<option value="${m}" ${(+s.em===m)?'selected':''}>${m}월</option>`).join('')}</select><span style="color:var(--faint)">시작월 첫 거래일 시작 · 끝월 마지막 거래일 종가로 정리 · 그 밖엔 현금 대기</span></div>`:''}${(s.type==='dongpa'||s.type==='dual')&&s.sec?`<div style="display:flex;align-items:center;gap:8px;padding:4px 10px 8px 34px;font-size:11px;color:var(--dim)"><span style="white-space:nowrap">세컨 비중</span>`+
@@ -1620,7 +1632,7 @@ function renderWeights(){
   h+=`<div style="border-top:1px solid var(--line);padding-top:10px"><div style="font-size:11px;color:var(--dim);margin-bottom:6px">비중 (합산 백테스트용)</div>`;
   if(sliderOn && on.length>=2){
     for(const s of on){
-      h+=`<div class="wslider"><div class="nm"><span class="dot ${STRAT_TYPES[s.type].cls}"></span>${s.name}</div>`+
+      h+=`<div class="wslider"><div class="nm"><span class="dot ${STRAT_TYPES[s.type].cls}"></span>${s.name}${s.type==='cash'&&s.lock?' 🔒':''} <span id="wshare-${s.id}" style="font-size:10px;color:var(--faint);font-weight:400"></span></div>`+
          `<input type="range" min="0" max="100" step="1" value="${s.w}" id="wrng-${s.id}" oninput="setWslider('${s.id}',this.value)">`+
          `<span class="wval" style="display:inline-flex;align-items:center;gap:1px"><input id="wval-${s.id}" value="${Math.round(s.w)}" onchange="setWslider('${s.id}',this.value,true)" onfocus="this.select()" style="width:38px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);font-size:12px;padding:2px 4px;border-radius:4px">%</span></div>`;
     }
@@ -1632,7 +1644,7 @@ function renderWeights(){
     });
   }
   h+=`</div>`;
-  box.innerHTML=h; updateSum();
+  box.innerHTML=h; updateSum(); _renderInvShare();
 }
 function renameSlot(id,v){ const sl=slotById(id); if(sl){ sl.name=v||sl.name; run(); } }
 // 슬롯 파라미터 편집 모달
@@ -2069,11 +2081,22 @@ function _intSplit(list, total){ // list 각 k.w(실수)를 정수로, 합=total
   for(let t=0;t<ord.length&&rem>0;t++){ fl[ord[t][1]]++; rem--; }
   list.forEach((k,i)=>k.w=fl[i]);
 }
+// 현금 슬롯을 pct%로 두고, 나머지 켜진 매매법은 기존 비율 그대로 (100-pct) 안에서 나눔
+function _placeCash(c, pct){ const others=activeSlots().filter(k=>k!==c); c.w=pct; const rem=100-pct;
+  const os=others.reduce((a,k)=>a+k.w,0); others.forEach(k=>k.w=os>0?rem*k.w/os:rem/Math.max(1,others.length)); if(others.length) _intSplit(others, rem); saveAll(); }
+function toggleCashLock(id){ const sl=slotById(id); if(!sl||sl.type!=='cash') return; sl.lock=!sl.lock; saveAll(); renderWeights(); }
+// 현금 고정 시: 매매법별 '투자분 안 비율' 표시 (예: 70 중 23%)
+function _renderInvShare(){ const on=activeSlots(); const c=on.find(k=>k.type==='cash'&&k.lock);
+  on.forEach(k=>{ const el=document.getElementById('wshare-'+k.id); if(!el) return;
+    if(!c||k.type==='cash'){ el.textContent=''; return; } const inv=100-c.w; el.textContent=inv>0?`(${inv} 중 ${(k.w/inv*100).toFixed(0)}%)`:''; }); }
 function setWslider(id,v,fromInput){
   const on=activeSlots(); const sl=slotById(id); if(!sl) return;
   let nv=Math.round(parseFloat(v)||0); if(nv<0)nv=0; if(nv>100)nv=100; sl.w=nv;
-  const others=on.filter(k=>k.id!==id);
-  const remain=100-nv;
+  // 🔒 현금 고정: 고정된 현금 슬롯은 건드리지 않고 나머지 매매법끼리 (100-현금) 안에서 비율대로 나눔
+  const locked=on.filter(k=>k.id!==id&&k.type==='cash'&&k.lock); const lockSum=locked.reduce((a,k)=>a+k.w,0);
+  if(nv>100-lockSum){ nv=100-lockSum; sl.w=nv; }
+  const others=on.filter(k=>k.id!==id&&!locked.includes(k));
+  const remain=100-nv-lockSum;
   if(others.length===1){ others[0].w=remain; }
   else if(others.length>=2){
     let osum=0; others.forEach(k=>osum+=k.w);
@@ -2084,8 +2107,10 @@ function setWslider(id,v,fromInput){
   on.forEach(k=>{ // 입력칸 값 갱신 (지금 타자 치는 칸은 건드리지 않음)
     const inp=document.getElementById('wval-'+k.id);
     if(inp && !(fromInput && k.id===id)) inp.value=Math.round(k.w);
-    const rng=document.getElementById('wrng-'+k.id); if(rng&&k.id!==id) rng.value=Math.round(k.w);
+    const rng=document.getElementById('wrng-'+k.id); if(rng&&(k.id!==id||nv!==Math.round(parseFloat(v)||0))) rng.value=Math.round(k.w);
+    if(fromInput&&k.id===id&&inp&&+inp.value!==Math.round(k.w)) inp.value=Math.round(k.w);
   });
+  _renderInvShare();
   saveAll(); updateSum(); run();
 }
 function updateSum(){ let sum=0; activeSlots().forEach(s=>sum+=s.w);
@@ -3492,7 +3517,7 @@ function saveAll(){
   const params={};
   for(const k in DEFAULTS){ const el=document.getElementById(k); if(el) params[k]=el.value; }
   // 백테스트 비중/on, 3모드 티어비중, 수수료
-  const slots=SLOTS.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on,w:s.w,presetId:s.presetId||null,params:JSON.parse(JSON.stringify(s.params||{})),sec:s.sec||false,secW:s.secW,smOn:s.smOn||false,sm:s.sm||null,em:s.em||0}));
+  const slots=SLOTS.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on,w:s.w,presetId:s.presetId||null,params:JSON.parse(JSON.stringify(s.params||{})),sec:s.sec||false,secW:s.secW,smOn:s.smOn||false,sm:s.sm||null,em:s.em||0,lock:s.lock||false}));
   const tw=JSON.parse(JSON.stringify(TW));
   const twdf=JSON.parse(JSON.stringify(TWDF||[]));
   const twdg=JSON.parse(JSON.stringify(TWDG||[])); const twdgOn=TWDG_ON;
@@ -3532,7 +3557,7 @@ function loadAll(){
   if(d.curAcct) _curAcct=d.curAcct;
   // 백테스트 비중/on 복원
   if(d.slots && Array.isArray(d.slots) && d.slots.length){
-    SLOTS=d.slots.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on!==false,w:s.w||0,presetId:s.presetId||null,params:s.params||{},sec:s.sec||false,secW:s.secW,smOn:s.smOn||false,sm:s.sm||null,em:s.em||0}));
+    SLOTS=d.slots.map(s=>({id:s.id,type:s.type,name:s.name,on:s.on!==false,w:s.w||0,presetId:s.presetId||null,params:s.params||{},sec:s.sec||false,secW:s.secW,smOn:s.smOn||false,sm:s.sm||null,em:s.em||0,lock:s.lock||false}));
     let mx=0; SLOTS.forEach(s=>{ const n=parseInt(String(s.id).replace('s',''))||0; if(n>mx)mx=n; });
     if(Array.isArray(d.deletedSlots)){ DELETED_SLOTS=d.deletedSlots.slice(); DELETED_SLOTS.forEach(id=>{ const n=parseInt(String(id).replace('s',''))||0; if(n>mx)mx=n; }); }
     _slotSeq=Math.max(_slotSeq||0, mx);
