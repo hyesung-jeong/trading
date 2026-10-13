@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v30</title>
+<title>SOXL/TQQQ/QQQ/QLD 폭락적립 · 변동성 v31</title>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
 <style>
 :root{--bg:#fff;--card:#f7f8fa;--line:#e6e8ec;--ink:#191c22;--sub:#6b7280;--mut:#9aa1ad;--acc:#0f766e;--up:#dc2626;--dn:#2563eb}
@@ -55,7 +55,7 @@ canvas{width:100%;display:block}
 </head>
 <body>
 <div class="wrap">
-  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;padding:2px 8px;border-radius:6px">SOXL/TQQQ/QQQ/QLD · v16 바닥잡기</span></h1>
+  <a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 style="display:inline-block">폭락적립 · 변동성 <span style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;padding:2px 8px;border-radius:6px">SOXL/TQQQ/QQQ/QLD · v31 축소확대</span></h1>
   <div class="sub" id="datarange">–</div>
   <div class="sub" id="sync-status" style="cursor:pointer"></div>
 
@@ -71,6 +71,7 @@ canvas{width:100%;display:block}
   <div class="seg">
     <span class="on" data-v="drop" onclick="setView('drop')">폭락 적립</span>
     <span data-v="vol" onclick="setView('vol')">변동성(표준편차)</span>
+    <span data-v="sig" onclick="setView('sig')">📶 축소·확대</span>
     <span data-v="data" onclick="setView('data')">주가 데이터</span>
   </div>
 
@@ -178,6 +179,34 @@ canvas{width:100%;display:block}
     <div class="card">
       <div class="label">참고 통계 (최근 1년)</div>
       <table><tbody id="volstat"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ===== 비중 축소·확대 신호 뷰 (SOXX 주봉 이격도차이) ===== -->
+  <div id="view-sig" class="hidden">
+    <div class="card" id="sig-now"></div>
+    <div class="card">
+      <div class="label">SOXX 주봉 · 신호 <span style="font-size:11px;font-weight:400;color:var(--mut)">▲빨강=비중 확대 · ▼파랑=비중 축소 · 배경=현재 구간</span></div>
+      <canvas id="sigchart" height="260"></canvas>
+      <div class="sub" style="margin-top:4px">아래: 이격차이 A(검정) · A의 X주 평균(빨강) · A의 X2주 평균(파랑) · −10선(회색)</div>
+    </div>
+    <div class="card">
+      <div class="label">신호 목록 <span style="font-size:11px;font-weight:400;color:var(--mut)">구간 수익 = 신호 주 종가 → 다음 반대 신호 주 종가 (마지막은 현재까지)</span></div>
+      <div style="overflow-x:auto"><table style="white-space:nowrap;font-size:11.5px"><thead><tr><th>주(월요일)</th><th>신호</th><th>SOXX</th><th>SOXL</th><th>구간 SOXX</th><th>구간 SOXL</th><th>기간</th></tr></thead><tbody id="sigbody"></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="label">조건 설정 <span class="tgl" style="float:right" onclick="sigReset()">기본값</span></div>
+      <div class="addrow" style="grid-template-columns:repeat(5,1fr)">
+        <div class="field"><label>PERIOD1</label><input id="sg_p1" inputmode="numeric"></div>
+        <div class="field"><label>PERIOD2</label><input id="sg_p2" inputmode="numeric"></div>
+        <div class="field"><label>X (확대)</label><input id="sg_x" inputmode="numeric"></div>
+        <div class="field"><label>X2 (축소)</label><input id="sg_x2" inputmode="numeric"></div>
+        <div class="field"><label>A &gt;</label><input id="sg_fl" inputmode="decimal"></div>
+      </div>
+      <div class="sub" style="margin-top:8px;line-height:1.6">A = DISPARITY(PERIOD1) − DISPARITY(PERIOD2) &nbsp;(이격도 = 주봉 종가 ÷ 이평 × 100)<br>
+      <b style="color:var(--up)">비중 확대</b>: CROSSDOWN(A, avg(A,X)) AND A &gt; −10<br>
+      <b style="color:var(--dn)">비중 축소</b>: CROSSUP(A, avg(A,X2))<br>
+      주봉 = 각 주 마지막 거래일 종가 · 신호는 그 주 금요일 종가에 확정 (이번 주 진행중이면 '잠정') · 주가 데이터 탭 추가분·수동입력 주가 포함</div>
     </div>
   </div>
 
@@ -802,10 +831,96 @@ function renderData(){
     $('add_date').value=d.toISOString().slice(0,10); }
 }
 
+// ===== 📶 비중 축소·확대 신호 (SOXX 주봉 이격도차이, 세력주돌려차기 SOXL 기본서 1부) =====
+const SIG_DEF={p1:25,p2:100,x:25,x2:80,fl:-10};
+function sigCfg(){ if(!ST.sig) ST.sig={...SIG_DEF}; return ST.sig; }
+function _ymdDate(d){ return new Date(2000+parseInt(d.slice(0,2)),parseInt(d.slice(2,4))-1,parseInt(d.slice(4,6))); }
+function _fmtD(dt){ return dt.getFullYear()+'.'+String(dt.getMonth()+1).padStart(2,'0')+'.'+String(dt.getDate()).padStart(2,'0'); }
+function calcSig(){
+  const g=sigCfg(); const P1=+g.p1||25,P2=+g.p2||100,X=+g.x||25,X2=+g.x2||80,FL=(g.fl===''||g.fl==null)?-10:+g.fl;
+  const rows=getRows('SOXX'); const sx={}; getRows('SOXL').forEach(r=>sx[r.d]=r.c);
+  const W=[]; // 주봉: 월요일 키
+  rows.forEach(r=>{ const dt=_ymdDate(r.d); const mon=new Date(dt); mon.setDate(dt.getDate()-((dt.getDay()+6)%7)); const k=_fmtD(mon);
+    const last=W[W.length-1]; if(last&&last.k===k){ last.d=r.d; last.c=r.c; } else W.push({k, mon, d:r.d, c:r.c}); });
+  const n=W.length, C=W.map(w=>w.c);
+  const sma=(a,len,i)=>{ if(i<len-1) return null; let t=0; for(let j=i-len+1;j<=i;j++){ if(a[j]==null) return null; t+=a[j]; } return t/len; };
+  const A=C.map((c,i)=>{ const m1=sma(C,P1,i), m2=sma(C,P2,i); return (m1==null||m2==null)?null:(c/m1*100-c/m2*100); });
+  const B1=A.map((_,i)=>sma(A,X,i)), B2=A.map((_,i)=>sma(A,X2,i));
+  const sigs=[];
+  for(let i=1;i<n;i++){
+    if(A[i-1]!=null&&B1[i-1]!=null&&B1[i]!=null && A[i-1]>=B1[i-1] && A[i]<B1[i] && A[i]>FL) sigs.push({i,t:'U'});
+    if(A[i-1]!=null&&B2[i-1]!=null&&B2[i]!=null && A[i-1]<=B2[i-1] && A[i]>B2[i]) sigs.push({i,t:'D'});
+  }
+  // 이번 주가 아직 안 끝났으면(마지막 행이 금요일 이전이고 오늘 기준 같은 주) 잠정
+  const lastW=W[n-1]; const today=new Date(); const lastDay=_ymdDate(lastW.d);
+  const weekDone=(lastDay.getDay()===5) || (today-lastW.mon > 7*864e5);
+  sigs.forEach(s=>{ const w=W[s.i]; s.k=w.k; s.d=w.d; s.soxx=w.c; s.soxl=sx[w.d]; s.prov=(s.i===n-1&&!weekDone); });
+  return {W,A,B1,B2,sigs,P1,P2,X,X2,FL,weekDone,sx};
+}
+function renderSig(){
+  const g=sigCfg(); ['p1','p2','x','x2','fl'].forEach(k=>{ const el=$('sg_'+k); if(el&&document.activeElement!==el) el.value=g[k]; });
+  const R=calcSig(); const {W,A,B1,B2,sigs}=R; const n=W.length;
+  // 구간 수익: 다음 '반대' 신호까지
+  const lastW=W[n-1], lastSoxl=R.sx[lastW.d];
+  sigs.forEach((s,j)=>{ let e=null; for(let q=j+1;q<sigs.length;q++){ if(sigs[q].t!==s.t){ e=sigs[q]; break; } }
+    s.endW = e?W[e.i]:lastW; s.open=!e;
+    s.rx=(s.endW.c/s.soxx-1)*100; const el=R.sx[s.endW.d]; s.rl=(s.soxl&&el)?(el/s.soxl-1)*100:null;
+    s.wk=(e?e.i:n-1)-s.i; });
+  // 현재 상태 = 마지막 신호
+  const ls=sigs[sigs.length-1];
+  const st=ls?(ls.t==='U'?{txt:'비중 확대 구간',col:'var(--up)',bg:'#fdecec'}:{txt:'비중 축소 구간',col:'var(--dn)',bg:'#e8f0fe'}):{txt:'신호 없음',col:'var(--sub)',bg:'#fff'};
+  const a=A[n-1], b1=B1[n-1], b2=B2[n-1];
+  $('sig-now').innerHTML=`<div class="label">현재 상태 <span style="font-size:11px;font-weight:400;color:var(--mut)">SOXX 주봉 · 최근 ${dstr(lastW.d)} 종가 기준${R.weekDone?'':' (이번 주 진행중)'}</span></div>
+   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="font-size:22px;font-weight:800;color:${st.col};background:${st.bg};padding:6px 14px;border-radius:10px">${ls&&ls.t==='U'?'▲':'▼'} ${st.txt}</div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.7">${ls?`마지막 신호: <b style="color:${st.col}">${ls.t==='U'?'확대':'축소'}</b> ${ls.k} 주${ls.prov?' <span style="color:#d97706">(잠정)</span>':''} · ${ls.wk}주 경과`:''}<br>
+     A <b>${a!=null?a.toFixed(2):'–'}</b> · avg(A,${R.X}) ${b1!=null?b1.toFixed(2):'–'} · avg(A,${R.X2}) ${b2!=null?b2.toFixed(2):'–'}<br>
+     <span style="color:var(--mut)">축소 신호까지: A가 ${b2!=null?b2.toFixed(2):'–'} 위로 올라가면 (현재 차이 ${(a!=null&&b2!=null)?(b2-a).toFixed(2):'–'})</span></div></div>`;
+  $('sigbody').innerHTML=sigs.slice().reverse().map(s=>{ const U=s.t==='U';
+    const f=v=>v==null?'–':`<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+    return `<tr style="background:${U?'rgba(220,38,38,.05)':'rgba(37,99,235,.05)'}"><td>${s.k}${s.prov?' <span style="color:#d97706;font-size:10px">잠정</span>':''}</td>
+     <td style="font-weight:700;color:${U?'var(--up)':'var(--dn)'}">${U?'▲ 확대':'▼ 축소'}</td><td>$${s.soxx.toFixed(2)}</td><td>${s.soxl?'$'+s.soxl.toFixed(2):'–'}</td>
+     <td>${f(s.rx)}</td><td>${f(s.rl)}</td><td style="color:var(--mut)">${s.wk}주${s.open?' (진행)':''}</td></tr>`; }).join('') || '<tr><td colspan="7" style="color:var(--mut)">신호 없음</td></tr>';
+  requestAnimationFrame(()=>drawSig(R));
+}
+function drawSig(R){
+  const cv=$('sigchart'); if(!cv) return; const dpr=window.devicePixelRatio||1; const Wd=cv.clientWidth||520, H=260;
+  cv.width=Wd*dpr; cv.height=H*dpr; const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,Wd,H);
+  const {W,A,B1,B2,sigs}=R; const i0=Math.max(0,A.findIndex(v=>v!=null)); const n=W.length; if(n-i0<2) return;
+  const pad={l:4,r:44,t:10}, H1=150, gap=8, H2=H-H1-gap-24;
+  const px=i=>pad.l+(Wd-pad.l-pad.r)*(i-i0)/(n-1-i0);
+  // 구간 배경
+  for(let j=0;j<sigs.length;j++){ const s=sigs[j]; if(s.i<i0) continue; const e=(j+1<sigs.length)?sigs[j+1].i:n-1;
+    ctx.fillStyle=s.t==='U'?'rgba(220,38,38,.07)':'rgba(37,99,235,.08)'; ctx.fillRect(px(s.i),pad.t,Math.max(1,px(e)-px(s.i)),H1+gap+H2); }
+  // 가격(로그)
+  const cs=W.slice(i0).map(w=>Math.log(w.c)); const mn=Math.min(...cs), mx=Math.max(...cs);
+  const py=c=>pad.t+H1*(1-(Math.log(c)-mn)/(mx-mn||1));
+  ctx.beginPath(); for(let i=i0;i<n;i++){ i===i0?ctx.moveTo(px(i),py(W[i].c)):ctx.lineTo(px(i),py(W[i].c)); } ctx.strokeStyle='#191c22'; ctx.lineWidth=1.3; ctx.stroke();
+  ctx.font='10px Pretendard'; ctx.fillStyle='#9aa1ad'; ctx.fillText('$'+W[n-1].c.toFixed(0), Wd-pad.r+4, py(W[n-1].c)+3);
+  if(Math.abs(py(W[n-1].c)-pad.t)>14) ctx.fillText('$'+Math.exp(mx).toFixed(0), Wd-pad.r+4, pad.t+8); ctx.fillText('$'+Math.exp(mn).toFixed(0), Wd-pad.r+4, pad.t+H1);
+  sigs.forEach(s=>{ if(s.i<i0) return; const x=px(s.i), y=py(W[s.i].c); const U=s.t==='U';
+    ctx.fillStyle=U?'#dc2626':'#2563eb'; ctx.beginPath();
+    if(U){ ctx.moveTo(x,y+6); ctx.lineTo(x-5,y+14); ctx.lineTo(x+5,y+14); } else { ctx.moveTo(x,y-6); ctx.lineTo(x-5,y-14); ctx.lineTo(x+5,y-14); }
+    ctx.closePath(); ctx.fill(); });
+  // 지표
+  const y2=pad.t+H1+gap; const vals=[]; for(let i=i0;i<n;i++){ [A[i],B1[i],B2[i]].forEach(v=>{ if(v!=null) vals.push(v); }); } vals.push(R.FL);
+  const vmn=Math.min(...vals), vmx=Math.max(...vals); const qy=v=>y2+H2*(1-(v-vmn)/(vmx-vmn||1));
+  ctx.strokeStyle='#bbb'; ctx.setLineDash([3,3]); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pad.l,qy(R.FL)); ctx.lineTo(Wd-pad.r,qy(R.FL)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='#9aa1ad'; ctx.fillText(String(R.FL), Wd-pad.r+4, qy(R.FL)+3);
+  const line=(arr,col,w)=>{ ctx.beginPath(); let st=false; for(let i=i0;i<n;i++){ const v=arr[i]; if(v==null){ st=false; continue; } st?ctx.lineTo(px(i),qy(v)):ctx.moveTo(px(i),qy(v)); st=true; } ctx.strokeStyle=col; ctx.lineWidth=w; ctx.stroke(); };
+  line(B2,'#2563eb',1.2); line(B1,'#dc2626',1.2); line(A,'#191c22',1.4);
+  // 연도 눈금
+  ctx.fillStyle='#9aa1ad'; let py0=null; for(let i=i0;i<n;i++){ const y=W[i].d.slice(0,2); if(y!==py0){ if(py0!==null && (+y)%2===0){ ctx.fillText('20'+y, Math.max(0,Math.min(px(i)-10, Wd-pad.r-24)), H-6); } py0=y; } }
+}
+function sigSet(){ const g=sigCfg(); ['p1','p2','x','x2','fl'].forEach(k=>{ const v=$('sg_'+k).value.trim(); if(v!==''&&!isNaN(+v)) g[k]=+v; }); save(true); renderSig(); }
+function sigReset(){ ST.sig={...SIG_DEF}; save(true); renderSig(); }
+['p1','p2','x','x2','fl'].forEach(k=>{ const el=document.getElementById('sg_'+k); if(el) el.addEventListener('change',sigSet); });
+window.addEventListener('resize',()=>{ if(ST.view==='sig') renderSig(); });
+
 // ===== 탭/뷰 =====
 function setTicker(tk){ ST.ticker=tk; save(); document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tk===tk)); refreshYears(); renderAll(); }
 function setView(v){ ST.view=v; save(); document.querySelectorAll('.seg span').forEach(s=>s.classList.toggle('on',s.dataset.v===v));
-  ['drop','vol','data'].forEach(x=>$('view-'+x).classList.toggle('hidden',x!==v)); renderAll(); }
+  ['drop','vol','sig','data'].forEach(x=>$('view-'+x).classList.toggle('hidden',x!==v)); renderAll(); }
 function tgl(id,el){ const b=$(id); const on=b.classList.contains('hidden'); b.classList.toggle('hidden',!on); el.textContent=on?'접기 ▴':'펼치기 ▾'; }
 
 function refreshYears(){
@@ -822,6 +937,7 @@ function renderAll(){
   $('datarange').textContent=`${ST.ticker} · ${dstr(rows[0].d)} ~ ${dstr(rows[rows.length-1].d)} (${rows.length+1}일)`;
   if(ST.view==='drop') renderDrop();
   else if(ST.view==='vol') renderVol();
+  else if(ST.view==='sig') renderSig();
   else renderData();
 }
 
@@ -915,7 +1031,7 @@ function setVolBase(b){ ST.volBase=b; save(true); document.querySelectorAll('#vi
 document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tk===ST.ticker));
 document.querySelectorAll('.seg span').forEach(s=>{ if(s.dataset.v) s.classList.toggle('on',s.dataset.v===ST.view); });
 document.querySelectorAll('#view-vol .seg span').forEach(x=>x.classList.toggle('on',x.dataset.b===(ST.volBase||'C')));
-['drop','vol','data'].forEach(x=>$('view-'+x).classList.toggle('hidden',x!==ST.view));
+['drop','vol','sig','data'].forEach(x=>$('view-'+x).classList.toggle('hidden',x!==ST.view));
 refreshYears();
 renderAll();
 if(cloudOn() && !cloudProfile()) askCloudProfile(); else cloudInit();
