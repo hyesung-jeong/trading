@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v91 · 동기화수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button><button onclick="cloudLoadLatest()" title="클라우드에 전체 저장된 최종본을 강제로 불러옵니다 (이 기기 설정을 덮어씀)" style="margin-left:4px;padding:3px 9px;border:1px solid #6a1b9a;background:#f3e5f5;color:#4a148c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">⤓ 불러오기</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v92 · 저장실패수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button><button onclick="cloudLoadLatest()" title="클라우드에 전체 저장된 최종본을 강제로 불러옵니다 (이 기기 설정을 덮어씀)" style="margin-left:4px;padding:3px 9px;border:1px solid #6a1b9a;background:#f3e5f5;color:#4a148c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">⤓ 불러오기</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -3251,9 +3251,9 @@ function setSyncStatus(txt, color){
 function cloudHeaders(){ return {'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'}; }
 async function cloudFetch(){
   const prof=cloudProfile(); if(!cloudOn()||!prof) return null;
-  const url=`${SUPABASE_URL}/rest/v1/configs?id=eq.${encodeURIComponent(prof)}&select=data,updated_at&_t=${Date.now()}`;
+  const url=`${SUPABASE_URL}/rest/v1/configs?id=eq.${encodeURIComponent(prof)}&select=data,updated_at&order=updated_at.desc&limit=1`;   // ※ 임의 파라미터(_t 등) 넣으면 Supabase가 컬럼필터로 보고 400 에러
   const res=await fetch(url,{headers:cloudHeaders(), cache:'no-store'});   // 브라우저 캐시된 옛 클라우드본 받는 문제 방지
-  if(!res.ok) throw new Error('fetch '+res.status);
+  if(!res.ok){ let tx=''; try{ tx=await res.text(); }catch(e){} throw new Error('불러오기 '+res.status+' '+tx.slice(0,80)); }
   const rows=await res.json();
   return rows.length?rows[0]:null;
 }
@@ -3308,8 +3308,8 @@ async function cloudSaveAll(){
       body:JSON.stringify([{id:prof, data:bundle, updated_at:new Date().toISOString()}]) });
     if(!res.ok){ let tx=''; try{ tx=await res.text(); }catch(e){} throw new Error('업로드 실패 '+res.status+' '+tx.slice(0,80)); }
     // 저장 검증: 다시 읽어서 방금 올린 저장본이 맞는지 확인
-    let _chk=null; try{ _chk=bundleFromRow(await cloudFetch()); }catch(e){}
-    if(!_chk || _chk.snapshotAt!==t) throw new Error('클라우드 저장 확인 실패 (다시 눌러주세요)');
+    let _chk=null, _ce=''; try{ _chk=bundleFromRow(await cloudFetch()); }catch(e){ _ce=(e&&e.message)||String(e); }
+    if(!_chk || _chk.snapshotAt!==t) throw new Error('업로드는 됐으나 확인 실패: '+(_ce||('클라우드 저장본 '+(_chk&&_chk.snapshotAt?_snapTime(_chk.snapshotAt):'없음')+' ≠ 방금 '+_snapTime(t))));
     setLocalSnapAt(t); writeLocalBundle({active:bundle.active, sets:b.sets, presets:b.presets}); _markSynced();
     const hh=new Date(t); const hm=hh.getHours()+':'+String(hh.getMinutes()).padStart(2,'0');
     setSyncStatus('☁ 전체 저장됨 '+hm+' ('+prof+')','#1565c0');
