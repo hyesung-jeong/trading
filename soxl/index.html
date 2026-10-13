@@ -193,7 +193,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v90 · 2026누락수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button></div>
+    <div class="brand"><a href="../" title="홈으로" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#0f766e;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;margin-right:10px">🏠 홈</a><h1 id="page-title">🔵 SOXL 백테스트</h1><span class="ver">멀티 v91 · 동기화수정</span><span id="sync-status" onclick="askCloudProfile()" style="font-size:11px;cursor:pointer;margin-left:8px"></span><button onclick="cloudSaveAll()" title="현재 파라미터·프리셋·매매법 설정을 최종본으로 저장. 다른 기기는 새로고침하면 이걸 그대로 받습니다." style="margin-left:8px;padding:3px 9px;border:1px solid #1565c0;background:#e3f0fb;color:#0d47a1;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁ 전체 저장</button><button onclick="cloudLoadLatest()" title="클라우드에 전체 저장된 최종본을 강제로 불러옵니다 (이 기기 설정을 덮어씀)" style="margin-left:4px;padding:3px 9px;border:1px solid #6a1b9a;background:#f3e5f5;color:#4a148c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">⤓ 불러오기</button></div>
     <div class="period" id="period-label">2018~ · 단리(연 리셋) · 각 전략 $30,000</div>
   </header>
   <div class="topmenu">
@@ -3251,8 +3251,8 @@ function setSyncStatus(txt, color){
 function cloudHeaders(){ return {'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'}; }
 async function cloudFetch(){
   const prof=cloudProfile(); if(!cloudOn()||!prof) return null;
-  const url=`${SUPABASE_URL}/rest/v1/configs?id=eq.${encodeURIComponent(prof)}&select=data,updated_at`;
-  const res=await fetch(url,{headers:cloudHeaders()});
+  const url=`${SUPABASE_URL}/rest/v1/configs?id=eq.${encodeURIComponent(prof)}&select=data,updated_at&_t=${Date.now()}`;
+  const res=await fetch(url,{headers:cloudHeaders(), cache:'no-store'});   // 브라우저 캐시된 옛 클라우드본 받는 문제 방지
   if(!res.ok) throw new Error('fetch '+res.status);
   const rows=await res.json();
   return rows.length?rows[0]:null;
@@ -3307,12 +3307,27 @@ async function cloudSaveAll(){
     const res=await fetch(`${SUPABASE_URL}/rest/v1/configs`,{ method:'POST', headers:{...cloudHeaders(),'Prefer':'resolution=merge-duplicates'},
       body:JSON.stringify([{id:prof, data:bundle, updated_at:new Date().toISOString()}]) });
     if(!res.ok){ let tx=''; try{ tx=await res.text(); }catch(e){} throw new Error('업로드 실패 '+res.status+' '+tx.slice(0,80)); }
+    // 저장 검증: 다시 읽어서 방금 올린 저장본이 맞는지 확인
+    let _chk=null; try{ _chk=bundleFromRow(await cloudFetch()); }catch(e){}
+    if(!_chk || _chk.snapshotAt!==t) throw new Error('클라우드 저장 확인 실패 (다시 눌러주세요)');
     setLocalSnapAt(t); writeLocalBundle({active:bundle.active, sets:b.sets, presets:b.presets}); _markSynced();
     const hh=new Date(t); const hm=hh.getHours()+':'+String(hh.getMinutes()).padStart(2,'0');
     setSyncStatus('☁ 전체 저장됨 '+hm+' ('+prof+')','#1565c0');
     alert('전체 저장 완료. 다른 기기에서 새로고침하면 이 설정이 그대로 나옵니다.');
   }catch(e){ setSyncStatus('☁ 전체 저장 실패: '+(e&&e.message?e.message:e),'#c62828'); alert('전체 저장 실패: '+(e&&e.message?e.message:e)); }
   _cloudBusy=false;
+}
+async function cloudLoadLatest(){
+  const prof=cloudProfile(); if(!cloudOn()||!prof){ alert('동기화 코드(hs1 등)를 먼저 설정하세요.'); return; }
+  setSyncStatus('☁ 불러오는 중…','#b07d0a');
+  let row=null; try{ row=await cloudFetch(); }catch(e){ setSyncStatus('☁ 불러오기 실패: '+(e&&e.message?e.message:e),'#c62828'); alert('불러오기 실패: '+(e&&e.message?e.message:e)); return; }
+  const C=bundleFromRow(row);
+  if(!C||!C.active){ setSyncStatus('☁ 클라우드('+prof+')에 저장본 없음','#c62828'); alert('클라우드('+prof+')에 저장된 설정이 없습니다.'); return; }
+  const when=C.snapshotAt?_snapTime(C.snapshotAt):'시각 미상';
+  if(!confirm('클라우드('+prof+') 최종본 '+when+' 저장본을 불러옵니다.\n이 기기의 현재 설정은 그걸로 바뀝니다. 진행할까요?')){ _showDirty(); return; }
+  writeLocalBundle({active:C.active, sets:C.sets, presets:C.presets}); if(C.snapshotAt) setLocalSnapAt(C.snapshotAt);
+  applyLocalToUI(); _markSynced();
+  setSyncStatus('☁ 최종본 불러옴 '+when+' ('+prof+')','#1565c0');
 }
 // ── 병합 유틸 ──
 function readLocalBundle(){ const ls=safeLS(); let active=null; try{ active=JSON.parse(ls.getItem(LS_KEY)); }catch(e){} return {active, sets:getSets(), presets:getPresetStore()}; }
@@ -3404,7 +3419,8 @@ async function cloudInit(){
   if(!cloudProfile()){ setSyncStatus('☁ 동기화 코드 설정','var(--dim)'); _initDone=true; return; }
   setSyncStatus('☁ 확인중…','var(--dim)');
   try{
-    let row=null; try{ row=await cloudFetch(); }catch(e){ row=null; }
+    let row=null, ferr=null; try{ row=await cloudFetch(); }catch(e){ row=null; ferr=e; }
+    if(ferr){ _initDone=true; setSyncStatus('⚠ 클라우드 확인 실패 ('+(ferr&&ferr.message?ferr.message:ferr)+') — 새로고침 또는 ⤓ 불러오기','#c62828'); return; }
     const C=bundleFromRow(row);
     _initDone=true;
     // 페이지 로드시: 클라우드에 '전체 저장' 최종본이 로컬보다 새로우면 그것만 받아 적용. 자동 업로드는 안 함.
